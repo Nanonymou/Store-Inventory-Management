@@ -1,10 +1,11 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   dailyStock,
   masterItems,
   sites,
   stockAdjustments,
+  users,
 } from "@/db/schema";
 import { logActivity } from "@/lib/auth/audit";
 import { todayISODate } from "@/lib/date";
@@ -150,4 +151,109 @@ export async function createAdjustment(
   });
 
   return { adjustment, before, after };
+}
+
+export interface ListAdjustmentsFilters {
+  siteId?: string;
+  reason?: string;
+  q?: string;
+  sort?: "date" | "difference";
+  dir?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdjustmentDTO {
+  id: string;
+  date: string;
+  site: string;
+  itemCode: string;
+  itemDescription: string;
+  before: number;
+  after: number;
+  reason: string;
+  note: string;
+  adjustedBy: string;
+}
+
+function adjustmentConditions(filters: ListAdjustmentsFilters): SQL[] {
+  const conditions: SQL[] = [];
+  if (filters.siteId && filters.siteId !== "all") {
+    conditions.push(eq(stockAdjustments.siteId, filters.siteId));
+  }
+  if (filters.reason && filters.reason !== "all") {
+    conditions.push(eq(stockAdjustments.reason, filters.reason));
+  }
+  if (filters.q && filters.q.trim()) {
+    const like = `%${filters.q.trim()}%`;
+    const match = or(
+      ilike(masterItems.itemCode, like),
+      ilike(masterItems.description, like),
+    );
+    if (match) conditions.push(match);
+  }
+  return conditions;
+}
+
+/**
+ * List adjustment history joined with site, item, and adjuster, with filters,
+ * sorting (by date or signed difference), and pagination.
+ */
+export async function listAdjustments(
+  filters: ListAdjustmentsFilters = {},
+): Promise<AdjustmentDTO[]> {
+  const conditions = adjustmentConditions(filters);
+  const diffExpr = sql<number>`(${stockAdjustments.afterQty} - ${stockAdjustments.beforeQty})`;
+  const dir = filters.dir ?? "desc";
+  const orderCol =
+    filters.sort === "difference" ? diffExpr : stockAdjustments.adjustmentDate;
+  const orderBy = dir === "asc" ? asc(orderCol) : desc(orderCol);
+
+  const rows = await db
+    .select({
+      id: stockAdjustments.id,
+      date: stockAdjustments.adjustmentDate,
+      before: stockAdjustments.beforeQty,
+      after: stockAdjustments.afterQty,
+      reason: stockAdjustments.reason,
+      note: stockAdjustments.note,
+      site: sites.name,
+      itemCode: masterItems.itemCode,
+      itemDescription: masterItems.description,
+      adjustedBy: users.name,
+    })
+    .from(stockAdjustments)
+    .innerJoin(sites, eq(stockAdjustments.siteId, sites.id))
+    .innerJoin(masterItems, eq(stockAdjustments.itemId, masterItems.id))
+    .leftJoin(users, eq(stockAdjustments.adjustedBy, users.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(orderBy)
+    .limit(Math.min(filters.limit ?? 100, 500))
+    .offset(filters.offset ?? 0);
+
+  return rows.map((r) => ({
+    id: r.id,
+    date: r.date,
+    site: r.site,
+    itemCode: r.itemCode,
+    itemDescription: r.itemDescription,
+    before: r.before,
+    after: r.after,
+    reason: r.reason,
+    note: r.note ?? "",
+    adjustedBy: r.adjustedBy ?? "—",
+  }));
+}
+
+/** Total adjustments matching the filters (for pagination). */
+export async function countAdjustments(
+  filters: ListAdjustmentsFilters = {},
+): Promise<number> {
+  const conditions = adjustmentConditions(filters);
+  const [row] = await db
+    .select({ total: count() })
+    .from(stockAdjustments)
+    .innerJoin(masterItems, eq(stockAdjustments.itemId, masterItems.id))
+    .where(conditions.length ? and(...conditions) : undefined);
+  return row?.total ?? 0;
 }
