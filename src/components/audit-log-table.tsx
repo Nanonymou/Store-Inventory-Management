@@ -43,8 +43,38 @@ export function actionMeta(action: string): {
       };
     case "save_daily_stock":
       return { label: "Simpan Transaksi", variant: "secondary" };
+    case "revise_daily_stock":
+      return { label: "Revisi Transaksi", variant: "secondary" };
+    case "adjust_stock":
+      return {
+        label: "Penyesuaian Stok",
+        variant: "muted",
+        className: "bg-sky-500/10 text-sky-700",
+      };
+    case "create_transfer":
+      return { label: "Buat Transfer", variant: "secondary" };
+    case "create_user":
+      return {
+        label: "Buat Pengguna",
+        variant: "muted",
+        className: "bg-emerald-500/10 text-emerald-700",
+      };
+    case "update_user":
+      return { label: "Ubah Pengguna", variant: "default" };
+    case "reset_password":
+      return {
+        label: "Reset Password",
+        variant: "muted",
+        className: "bg-amber-500/10 text-amber-700",
+      };
     case "login":
       return { label: "Login", variant: "muted" };
+    case "login_failed":
+      return {
+        label: "Login Gagal",
+        variant: "muted",
+        className: "bg-destructive/10 text-destructive",
+      };
     case "logout":
       return { label: "Logout", variant: "muted" };
     case "access_denied":
