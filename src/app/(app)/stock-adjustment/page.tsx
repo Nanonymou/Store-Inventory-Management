@@ -41,12 +41,20 @@ export default function StockAdjustmentPage() {
   const [adjustments, setAdjustments] =
     React.useState<StockAdjustment[]>(MOCK_ADJUSTMENTS);
   const [formOpen, setFormOpen] = React.useState(false);
+  // Local applied-stock overrides so an adjustment takes effect immediately:
+  // once saved, the current stock for that (site, item) reflects the new value.
+  const [applied, setApplied] = React.useState<Record<string, number>>({});
 
-  // Mock current stock: today's computed balance for the item at the site.
+  const stockKey = (siteId: string, itemId: string) => `${siteId}:${itemId}`;
+
+  // Current stock = last applied value if any, else today's mock balance.
   const getCurrentStock = React.useCallback(
-    (siteId: string, itemId: string) =>
-      computeBalance(mockDailyStockRow(itemId, siteId, todayISODate())),
-    [],
+    (siteId: string, itemId: string) => {
+      const key = stockKey(siteId, itemId);
+      if (key in applied) return applied[key];
+      return computeBalance(mockDailyStockRow(itemId, siteId, todayISODate()));
+    },
+    [applied],
   );
 
   const handleCreate = (values: AdjustmentFormValues) => {
@@ -68,6 +76,12 @@ export default function StockAdjustmentPage() {
       adjustedBy: "Admin Pusat",
     };
     setAdjustments((prev) => [adjustment, ...prev]);
+    // Apply immediately: the current stock for this (site, item) now reflects
+    // the counted physical value, so reopening the form shows the new "before".
+    setApplied((prev) => ({
+      ...prev,
+      [stockKey(values.siteId, values.itemId)]: values.physicalCount,
+    }));
     setFormOpen(false);
 
     const diff = adjustment.after - adjustment.before;
@@ -82,6 +96,21 @@ export default function StockAdjustmentPage() {
     () => [...adjustments].sort((a, b) => b.date.localeCompare(a.date)),
     [adjustments],
   );
+
+  // Applied stock changes, resolved to readable site/item labels for display.
+  const appliedRows = React.useMemo(() => {
+    return Object.entries(applied).map(([key, value]) => {
+      const [siteId, itemId] = key.split(":");
+      const site = MOCK_SITES.find((s) => s.id === siteId);
+      const item = MOCK_MASTER_ITEMS.find((i) => i.id === itemId);
+      return {
+        key,
+        siteName: site?.name ?? siteId,
+        itemLabel: item ? `${item.itemCode} — ${item.description}` : itemId,
+        current: value,
+      };
+    });
+  }, [applied]);
 
   if (!isAdmin) return null;
 
@@ -104,6 +133,34 @@ export default function StockAdjustmentPage() {
           Penyesuaian Baru
         </Button>
       </header>
+
+      {appliedRows.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              Stok Terkini Setelah Penyesuaian
+            </CardTitle>
+            <CardDescription>
+              Perubahan diterapkan langsung (state lokal).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {appliedRows.map((r) => (
+              <div
+                key={r.key}
+                className="rounded-lg border bg-emerald-500/5 px-3 py-2 text-sm"
+              >
+                <div className="text-xs text-muted-foreground">
+                  {r.siteName} · {r.itemLabel}
+                </div>
+                <div className="font-semibold tabular-nums">
+                  Stok terkini: {r.current}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="border-b pb-4">
