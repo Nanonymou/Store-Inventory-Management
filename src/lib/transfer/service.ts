@@ -1,6 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { dailyStock, masterItems, sites, stockTransfers } from "@/db/schema";
+import { dailyStock, masterItems, sites, stockTransfers, users } from "@/db/schema";
 import { logActivity } from "@/lib/auth/audit";
 import { todayISODate } from "@/lib/date";
 
@@ -124,4 +125,91 @@ export async function createTransfer(
   });
 
   return created;
+}
+
+export interface ListTransfersFilters {
+  /** Filter by status, or "all"/undefined. */
+  status?: string;
+  /** Match against either the origin or destination site id, or "all". */
+  siteId?: string;
+  /** Keyword over item code / description. */
+  q?: string;
+  limit?: number;
+}
+
+export interface TransferDTO {
+  id: string;
+  date: string;
+  itemCode: string;
+  itemDescription: string;
+  fromSite: string;
+  toSite: string;
+  quantity: number;
+  status: string;
+  checkedBy: string;
+}
+
+/**
+ * List transfer history (newest first) joined with item, both sites, and the
+ * reviewer, filtered by status, involved site, and keyword.
+ */
+export async function listTransfers(
+  filters: ListTransfersFilters = {},
+): Promise<TransferDTO[]> {
+  const fromSites = alias(sites, "from_sites");
+  const toSites = alias(sites, "to_sites");
+  const checker = alias(users, "checker");
+
+  const conditions: SQL[] = [];
+  if (filters.status && filters.status !== "all") {
+    conditions.push(eq(stockTransfers.status, filters.status as never));
+  }
+  if (filters.siteId && filters.siteId !== "all") {
+    const bySite = or(
+      eq(stockTransfers.fromSiteId, filters.siteId),
+      eq(stockTransfers.toSiteId, filters.siteId),
+    );
+    if (bySite) conditions.push(bySite);
+  }
+  if (filters.q && filters.q.trim()) {
+    const like = `%${filters.q.trim()}%`;
+    const match = or(
+      ilike(masterItems.itemCode, like),
+      ilike(masterItems.description, like),
+    );
+    if (match) conditions.push(match);
+  }
+
+  const rows = await db
+    .select({
+      id: stockTransfers.id,
+      date: stockTransfers.transferDate,
+      quantity: stockTransfers.quantity,
+      status: stockTransfers.status,
+      itemCode: masterItems.itemCode,
+      itemDescription: masterItems.description,
+      fromSite: fromSites.name,
+      toSite: toSites.name,
+      checkedBy: checker.name,
+    })
+    .from(stockTransfers)
+    .innerJoin(masterItems, eq(stockTransfers.itemId, masterItems.id))
+    .innerJoin(fromSites, eq(stockTransfers.fromSiteId, fromSites.id))
+    .innerJoin(toSites, eq(stockTransfers.toSiteId, toSites.id))
+    .leftJoin(checker, eq(stockTransfers.checkedBy, checker.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(stockTransfers.transferDate), desc(stockTransfers.createdAt))
+    .limit(Math.min(filters.limit ?? 200, 500));
+
+  return rows.map((r) => ({
+    id: r.id,
+    date: r.date,
+    itemCode: r.itemCode,
+    itemDescription: r.itemDescription,
+    fromSite: r.fromSite,
+    toSite: r.toSite,
+    quantity: r.quantity,
+    status: r.status,
+    checkedBy: r.checkedBy ?? "—",
+  }));
 }
