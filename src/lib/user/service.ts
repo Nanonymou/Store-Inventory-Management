@@ -1,8 +1,12 @@
-import { eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { sites, users } from "@/db/schema";
 import type { UserRole } from "@/lib/types";
-import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
+import {
+  hashPassword,
+  validatePasswordPolicy,
+  verifyPassword,
+} from "@/lib/auth/password";
 import { logActivity } from "@/lib/auth/audit";
 
 /** Raised on invalid user input (400), missing user (404), or duplicate (409). */
@@ -31,6 +35,47 @@ export interface CreateUserInput {
   password: string;
   role: UserRole;
   siteId: string | null;
+}
+
+/** A user row for the management list, with the bound site's name resolved. */
+export interface UserListItem {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  siteId: string | null;
+  siteName: string | null;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+/** List all users (Admin management view), joined with their site name. */
+export async function listUsers(): Promise<UserListItem[]> {
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      siteId: users.siteId,
+      siteName: sites.name,
+      mustChangePassword: users.mustChangePassword,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .leftJoin(sites, eq(users.siteId, sites.id))
+    .orderBy(asc(users.name));
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    role: r.role,
+    siteId: r.siteId,
+    siteName: r.siteName,
+    mustChangePassword: r.mustChangePassword === 1,
+    createdAt: new Date(r.createdAt).toISOString(),
+  }));
 }
 
 async function assertEmailUnique(email: string, exceptId?: string) {
@@ -164,4 +209,92 @@ export async function updateUser(
     resourceTarget: `user:${existing.email}`,
     detail: "Memperbarui data pengguna.",
   });
+}
+
+/**
+ * Delete a user. Guards against removing the final Admin so the system is never
+ * left without one. (Referencing rows in audit_logs / daily_stock / transfers
+ * have their user columns set to null by the FK rules.)
+ */
+export async function deleteUser(
+  id: string,
+  actorUserId: string | null = null,
+): Promise<void> {
+  const [existing] = await db
+    .select({ id: users.id, email: users.email, role: users.role })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  if (!existing) throw new UserError(404, "Pengguna tidak ditemukan.");
+
+  if (existing.role === "admin") {
+    const [{ admins }] = await db
+      .select({ admins: count() })
+      .from(users)
+      .where(eq(users.role, "admin"));
+    if (admins <= 1) {
+      throw new UserError(400, "Tidak dapat menghapus Admin terakhir.");
+    }
+  }
+
+  await db.delete(users).where(eq(users.id, id));
+
+  await logActivity({
+    userId: actorUserId,
+    action: "delete_user",
+    resourceTarget: `user:${existing.email}`,
+    detail: "Menghapus akun pengguna.",
+  });
+}
+
+/**
+ * Change one's own password: verifies the current password, enforces the policy,
+ * stores the new hash, and clears the must-change flag. Auto-logs the change.
+ */
+export async function changePassword(
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const [existing] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      passwordHash: users.passwordHash,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!existing) throw new UserError(404, "Pengguna tidak ditemukan.");
+
+  const ok = await verifyPassword(oldPassword, existing.passwordHash);
+  if (!ok) throw new UserError(400, "Password lama salah.");
+
+  const policy = validatePasswordPolicy(newPassword);
+  if (policy) throw new UserError(400, policy);
+  if (oldPassword === newPassword) {
+    throw new UserError(400, "Password baru harus berbeda dari yang lama.");
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db
+    .update(users)
+    .set({ passwordHash, mustChangePassword: 0, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+
+  await logActivity({
+    userId,
+    action: "change_password",
+    resourceTarget: `user:${existing.email}`,
+    detail: "Mengubah password sendiri.",
+  });
+}
+
+/** Count of active admins (used for the last-admin delete guard elsewhere). */
+export async function otherAdminExists(exceptId: string): Promise<boolean> {
+  const [{ admins }] = await db
+    .select({ admins: count() })
+    .from(users)
+    .where(and(eq(users.role, "admin"), ne(users.id, exceptId)));
+  return admins > 0;
 }

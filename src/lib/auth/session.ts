@@ -30,6 +30,7 @@ interface RawSession {
   name?: string;
   role?: string;
   siteId?: string | null;
+  mustChangePassword?: boolean;
 }
 
 function isRole(value: unknown): value is UserRole {
@@ -51,6 +52,7 @@ export function parseSession(
       role: raw.role,
       // Admins are not bound to a site; Storemen must have one.
       siteId: raw.role === "admin" ? null : (raw.siteId ?? null),
+      mustChangePassword: raw.mustChangePassword === true,
     };
   } catch {
     return null;

@@ -14,6 +14,8 @@ interface SessionContextValue {
   setActiveSiteId: (siteId: string) => void;
   activeSite: Site | null;
   isAdmin: boolean;
+  /** True while the user must still change a temporary password. */
+  mustChangePassword: boolean;
   logout: (reason?: "idle") => void;
 }
 
@@ -137,6 +139,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setActiveSiteId: isAdmin ? setActiveSiteId : () => {},
     activeSite,
     isAdmin,
+    mustChangePassword: user.mustChangePassword === true,
     logout,
   };
 

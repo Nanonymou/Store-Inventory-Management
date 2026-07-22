@@ -56,14 +56,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const sessionUser = {
+      ...result.user,
+      mustChangePassword: result.mustChangePassword,
+    };
     const res = NextResponse.json({
       ok: true,
-      user: result.user,
+      user: sessionUser,
       mustChangePassword: result.mustChangePassword,
     });
     res.cookies.set(
       SESSION_COOKIE,
-      serializeSession(result.user),
+      serializeSession(sessionUser),
       sessionCookieOptions(),
     );
 

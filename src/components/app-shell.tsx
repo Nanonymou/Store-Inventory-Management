@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   User,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const ADMIN_NAV: NavItem[] = [
     icon: SlidersHorizontal,
     adminOnly: true,
   },
+  { href: "/users", label: "Pengguna", icon: Users, adminOnly: true },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
 ];
 
@@ -167,10 +169,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* User chip. */}
-            <span
+            {/* User chip → profile / change password. */}
+            <Link
+              href="/profile"
+              title="Profil & ubah password"
               className={cn(
-                "hidden items-center gap-1 rounded-full px-2 py-1 text-xs font-medium sm:inline-flex",
+                "hidden items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-opacity hover:opacity-80 sm:inline-flex",
                 isAdmin
                   ? "bg-primary/10 text-primary"
                   : "bg-emerald-500/10 text-emerald-700",
@@ -182,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <User className="size-3" />
               )}
               {user.name}
-            </span>
+            </Link>
 
             <Button
               type="button"

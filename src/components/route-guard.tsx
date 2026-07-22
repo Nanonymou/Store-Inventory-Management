@@ -13,16 +13,19 @@ import { useSession } from "@/components/session-provider";
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAdmin } = useSession();
+  const { isAdmin, mustChangePassword } = useSession();
 
   const blocked = !isAdmin && isAdminOnlyPath(pathname);
+  // Force a temporary-password change before anything else (except on /profile).
+  const forcePasswordChange = mustChangePassword && pathname !== "/profile";
 
   React.useEffect(() => {
     if (blocked) router.replace("/forbidden");
-  }, [blocked, router]);
+    else if (forcePasswordChange) router.replace("/profile");
+  }, [blocked, forcePasswordChange, router]);
 
-  // Avoid flashing protected content while the redirect is in flight.
-  if (blocked) return null;
+  // Avoid flashing protected content while a redirect is in flight.
+  if (blocked || forcePasswordChange) return null;
 
   return <>{children}</>;
 }
