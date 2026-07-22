@@ -8,6 +8,20 @@ export const ITEM_SECTIONS = [
 
 export type ItemSection = (typeof ITEM_SECTIONS)[number];
 
+/** Access roles. Storeman is site-bound; Admin has global access. */
+export type UserRole = "admin" | "storeman";
+
+/** The signed-in user's session context. */
+export interface SessionUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  /** Bound site for a Storeman; null for an Admin (all sites). */
+  siteId: string | null;
+  /** True while a temporary password must still be changed. */
+  mustChangePassword?: boolean;
+}
+
 /** Master item — the catalog record controlled by Admin. */
 export interface MasterItem {
   id: string;
@@ -59,8 +73,10 @@ export const MOVEMENT_COLUMNS: {
   label: string;
   /** Whether the movement subtracts from the balance. */
   isOutflow: boolean;
+  /** Auto-computed (not directly editable) — e.g. Beginning Balance. */
+  auto?: boolean;
 }[] = [
-  { key: "begBalance", label: "Beg. Balance", isOutflow: false },
+  { key: "begBalance", label: "Beg. Balance", isOutflow: false, auto: true },
   { key: "receiving", label: "Receiving", isOutflow: false },
   { key: "regular", label: "Regular", isOutflow: true },
   { key: "snack", label: "Snack", isOutflow: true },

@@ -1,4 +1,9 @@
-import type { DailyStockRow, MasterItem, Site } from "./types";
+import type {
+  DailyStockMovements,
+  DailyStockRow,
+  MasterItem,
+  Site,
+} from "./types";
 
 /** 11 storage sites as described in the PRD. */
 export const MOCK_SITES: Site[] = [
@@ -141,10 +146,83 @@ function seededInt(seed: string, max: number): number {
   return Math.abs(hash) % (max + 1);
 }
 
+/** The ISO date of the day before the given ISO date (YYYY-MM-DD). */
+export function previousISODate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  const py = dt.getFullYear();
+  const pm = String(dt.getMonth() + 1).padStart(2, "0");
+  const pd = String(dt.getDate()).padStart(2, "0");
+  return `${py}-${pm}-${pd}`;
+}
+
+/** A stable per-item baseline beginning balance, used to seed history. */
+function baseBeginningBalance(itemId: string): number {
+  return 40 + seededInt(itemId + "-base", 80);
+}
+
+/**
+ * The seeded movement quantities (everything except Beginning Balance) for an
+ * item at a site on a date. Deterministic per (item, site, date).
+ */
+function mockMovements(
+  itemId: string,
+  siteId: string,
+  date: string,
+): Omit<DailyStockMovements, "begBalance"> {
+  const seed = `${itemId}-${siteId}-${date}`;
+  return {
+    receiving: seededInt(seed + "rec", 30),
+    regular: seededInt(seed + "reg", 15),
+    snack: seededInt(seed + "sn", 6),
+    backcharge: seededInt(seed + "bc", 3),
+    hkl: seededInt(seed + "hkl", 3),
+    event: seededInt(seed + "ev", 4),
+    ent: seededInt(seed + "ent", 2),
+    toQty: seededInt(seed + "to", 3),
+    spoil: seededInt(seed + "sp", 2),
+  };
+}
+
+/** Net effect of the outflow/inflow movements on the balance (excl. begBalance). */
+function netMovement(m: Omit<DailyStockMovements, "begBalance">): number {
+  return (
+    m.receiving -
+    m.regular -
+    m.snack -
+    m.backcharge -
+    m.hkl -
+    m.event -
+    m.ent -
+    m.toQty -
+    m.spoil
+  );
+}
+
+/**
+ * The Beginning Balance for a day is, by rule, the Balance at the end of the
+ * previous day. We derive it from the previous day's baseline beginning balance
+ * plus that day's net movements — a deterministic stand-in for the real
+ * carry-over the backend will provide.
+ */
+export function autoBeginningBalance(
+  itemId: string,
+  siteId: string,
+  date: string,
+): number {
+  const prev = previousISODate(date);
+  const prevBalance =
+    baseBeginningBalance(itemId) +
+    netMovement(mockMovements(itemId, siteId, prev));
+  return Math.max(0, prevBalance);
+}
+
 /**
  * Build a mock daily stock row for an item at a site on a date. Values are
  * derived deterministically from the ids/date so re-selecting a date returns
- * the same numbers — a stand-in for what the backend will later serve.
+ * the same numbers — a stand-in for what the backend will later serve. The
+ * Beginning Balance is auto-carried from the previous day's Balance.
  */
 export function mockDailyStockRow(
   itemId: string,
@@ -157,16 +235,8 @@ export function mockDailyStockRow(
     itemId,
     siteId,
     date,
-    begBalance: 20 + seededInt(seed + "beg", 60),
-    receiving: seededInt(seed + "rec", 30),
-    regular: seededInt(seed + "reg", 15),
-    snack: seededInt(seed + "sn", 6),
-    backcharge: seededInt(seed + "bc", 3),
-    hkl: seededInt(seed + "hkl", 3),
-    event: seededInt(seed + "ev", 4),
-    ent: seededInt(seed + "ent", 2),
-    toQty: seededInt(seed + "to", 3),
-    spoil: seededInt(seed + "sp", 2),
+    begBalance: autoBeginningBalance(itemId, siteId, date),
+    ...mockMovements(itemId, siteId, date),
   };
 }
 

@@ -10,9 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import {
   MOVEMENT_COLUMNS,
   computeBalance,
+  type DailyStockMovements,
   type DailyStockRow,
   type MasterItem,
 } from "@/lib/types";
@@ -21,16 +23,108 @@ import { formatNumber, formatRupiah, cn } from "@/lib/utils";
 interface DailyTransactionTableProps {
   items: MasterItem[];
   rows: DailyStockRow[];
+  /** When false the cells are read-only (past dates / non-input mode). */
+  editable?: boolean;
+  /** Render each movement cell as its Rupiah value (Price × Qty) instead. */
+  showValue?: boolean;
+  /** Called when a Storeman edits a movement quantity. */
+  onCellChange?: (
+    itemId: string,
+    key: keyof DailyStockMovements,
+    value: number,
+  ) => void;
 }
 
 /**
- * The spreadsheet-style daily transaction table. Shows every master item with
- * its movement columns and the auto-computed Balance. A footer summarises the
- * Rupiah value flowing through each movement column (Price × Qty).
+ * Editable movement cell. Shows a number input in edit mode; in value mode (or
+ * when read-only) it renders formatted text so the money value is easy to read.
+ */
+function MovementCell({
+  value,
+  price,
+  isOutflow,
+  editable,
+  showValue,
+  auto,
+  onChange,
+}: {
+  value: number;
+  price: number;
+  isOutflow: boolean;
+  editable: boolean;
+  showValue: boolean;
+  /** Auto-computed column (e.g. Beginning Balance) — never directly editable. */
+  auto?: boolean;
+  onChange: (next: number) => void;
+}) {
+  if (showValue) {
+    return (
+      <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+        {formatRupiah(price * value)}
+      </TableCell>
+    );
+  }
+
+  // Auto-computed cells (Beginning Balance) are read-only even in input mode;
+  // the value is carried over from the previous day's Balance.
+  if (auto) {
+    return (
+      <TableCell
+        title="Otomatis dari Balance hari sebelumnya"
+        className="text-right tabular-nums text-muted-foreground"
+      >
+        {formatNumber(value)}
+      </TableCell>
+    );
+  }
+
+  if (!editable) {
+    return (
+      <TableCell
+        className={cn(
+          "text-right tabular-nums",
+          value > 0 && isOutflow ? "text-destructive" : "",
+        )}
+      >
+        {formatNumber(value)}
+      </TableCell>
+    );
+  }
+
+  return (
+    <TableCell className="p-1">
+      <Input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={value === 0 ? "" : value}
+        placeholder="0"
+        onChange={(e) => {
+          const raw = e.target.value;
+          const next = raw === "" ? 0 : Math.max(0, Math.floor(Number(raw)));
+          onChange(Number.isNaN(next) ? 0 : next);
+        }}
+        onFocus={(e) => e.target.select()}
+        className={cn(
+          "h-8 w-[76px] text-right tabular-nums",
+          value > 0 && isOutflow ? "text-destructive" : "",
+        )}
+      />
+    </TableCell>
+  );
+}
+
+/**
+ * The spreadsheet-style daily transaction form. Every master item gets a row of
+ * movement inputs; the Balance and the Rupiah value summary recompute live as
+ * the Storeman types.
  */
 export function DailyTransactionTable({
   items,
   rows,
+  editable = false,
+  showValue = false,
+  onCellChange,
 }: DailyTransactionTableProps) {
   const rowByItem = React.useMemo(() => {
     const map = new Map<string, DailyStockRow>();
@@ -38,7 +132,7 @@ export function DailyTransactionTable({
     return map;
   }, [rows]);
 
-  // Sum of Rupiah value per movement column across all items.
+  // Sum of Rupiah value per movement column across all items (live).
   const valueTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
     for (const col of MOVEMENT_COLUMNS) totals[col.key] = 0;
@@ -73,6 +167,14 @@ export function DailyTransactionTable({
                 )}
               >
                 {col.label}
+                {col.auto && (
+                  <span
+                    className="ml-1 text-[10px] font-normal text-muted-foreground"
+                    title="Otomatis dari Balance hari sebelumnya"
+                  >
+                    (auto)
+                  </span>
+                )}
               </TableHead>
             ))}
             <TableHead className="min-w-[96px] text-right font-semibold">
@@ -108,19 +210,23 @@ export function DailyTransactionTable({
                   {formatRupiah(item.price)}
                 </TableCell>
                 {MOVEMENT_COLUMNS.map((col) => (
-                  <TableCell
+                  <MovementCell
                     key={col.key}
-                    className={cn(
-                      "text-right tabular-nums",
-                      row && row[col.key] > 0 && col.isOutflow
-                        ? "text-destructive"
-                        : "",
-                    )}
-                  >
-                    {row ? formatNumber(row[col.key]) : "-"}
-                  </TableCell>
+                    value={row ? row[col.key] : 0}
+                    price={item.price}
+                    isOutflow={col.isOutflow}
+                    editable={editable}
+                    showValue={showValue}
+                    auto={col.auto}
+                    onChange={(next) => onCellChange?.(item.id, col.key, next)}
+                  />
                 ))}
-                <TableCell className="text-right font-semibold tabular-nums">
+                <TableCell
+                  className={cn(
+                    "text-right font-semibold tabular-nums",
+                    balance < 0 ? "text-destructive" : "",
+                  )}
+                >
                   {formatNumber(balance)}
                 </TableCell>
               </TableRow>
