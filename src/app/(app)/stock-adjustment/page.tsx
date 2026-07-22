@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
+import { Search, X } from "lucide-react";
 import { AdjustmentHistoryTable } from "@/components/adjustment-history-table";
 import {
   AdjustmentForm,
@@ -19,6 +23,7 @@ import {
 } from "@/components/adjustment-form";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
 import {
+  ADJUSTMENT_REASONS,
   MOCK_ADJUSTMENTS,
   type StockAdjustment,
 } from "@/lib/adjustment-mock";
@@ -41,6 +46,9 @@ export default function StockAdjustmentPage() {
   const [adjustments, setAdjustments] =
     React.useState<StockAdjustment[]>(MOCK_ADJUSTMENTS);
   const [formOpen, setFormOpen] = React.useState(false);
+  const [siteFilter, setSiteFilter] = React.useState("all");
+  const [reasonFilter, setReasonFilter] = React.useState("all");
+  const [query, setQuery] = React.useState("");
   // Local applied-stock overrides so an adjustment takes effect immediately:
   // once saved, the current stock for that (site, item) reflects the new value.
   const [applied, setApplied] = React.useState<Record<string, number>>({});
@@ -92,10 +100,32 @@ export default function StockAdjustmentPage() {
     });
   };
 
-  const sorted = React.useMemo(
-    () => [...adjustments].sort((a, b) => b.date.localeCompare(a.date)),
-    [adjustments],
-  );
+  // Distinct sites present in the history, for the site filter.
+  const siteOptions = React.useMemo(() => {
+    const set = new Set(adjustments.map((a) => a.site));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "id"));
+  }, [adjustments]);
+
+  const sorted = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return [...adjustments]
+      .filter((a) => {
+        if (siteFilter !== "all" && a.site !== siteFilter) return false;
+        if (reasonFilter !== "all" && a.reason !== reasonFilter) return false;
+        if (
+          q &&
+          !a.itemCode.toLowerCase().includes(q) &&
+          !a.itemDescription.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [adjustments, siteFilter, reasonFilter, query]);
+
+  const hasFilter =
+    siteFilter !== "all" || reasonFilter !== "all" || query.trim() !== "";
 
   // Applied stock changes, resolved to readable site/item labels for display.
   const appliedRows = React.useMemo(() => {
@@ -163,9 +193,66 @@ export default function StockAdjustmentPage() {
       )}
 
       <Card>
-        <CardHeader className="border-b pb-4">
-          <CardTitle>Riwayat Penyesuaian</CardTitle>
-          <CardDescription>{sorted.length} penyesuaian tercatat</CardDescription>
+        <CardHeader className="flex flex-col gap-4 border-b pb-4">
+          <div className="space-y-1">
+            <CardTitle>Riwayat Penyesuaian</CardTitle>
+            <CardDescription>
+              {sorted.length} dari {adjustments.length} penyesuaian
+            </CardDescription>
+          </div>
+          <div className="flex flex-col flex-wrap gap-3 sm:flex-row sm:items-end">
+            <div className="flex flex-col gap-1.5">
+              <Label>Site</Label>
+              <Select
+                value={siteFilter}
+                onValueChange={setSiteFilter}
+                options={[
+                  { value: "all", label: "Semua Site" },
+                  ...siteOptions.map((s) => ({ value: s, label: s })),
+                ]}
+                className="w-full sm:w-[170px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Alasan</Label>
+              <Select
+                value={reasonFilter}
+                onValueChange={setReasonFilter}
+                options={[
+                  { value: "all", label: "Semua Alasan" },
+                  ...ADJUSTMENT_REASONS.map((r) => ({ value: r, label: r })),
+                ]}
+                className="w-full sm:w-[180px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Pencarian</Label>
+              <div className="relative w-full sm:w-[220px]">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Item code / deskripsi…"
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            {hasFilter && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSiteFilter("all");
+                  setReasonFilter("all");
+                  setQuery("");
+                }}
+              >
+                <X className="size-4" />
+                Reset
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <AdjustmentHistoryTable adjustments={sorted} />
