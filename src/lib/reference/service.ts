@@ -1,6 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { itemSections, sites } from "@/db/schema";
+import { itemSections, sites, users } from "@/db/schema";
 import type { SessionUser } from "@/lib/types";
 
 /**
@@ -24,6 +24,25 @@ export async function listSitesForUser(user: SessionUser) {
   }
 
   return db.select(columns).from(sites).orderBy(asc(sites.name));
+}
+
+/**
+ * List all sites with the number of users assigned to each — Admin management
+ * view of the 11 locations. Ordered by name.
+ */
+export async function listAllSitesWithStats() {
+  const rows = await db
+    .select({
+      id: sites.id,
+      name: sites.name,
+      location: sites.location,
+      userCount: count(users.id),
+    })
+    .from(sites)
+    .leftJoin(users, eq(users.siteId, sites.id))
+    .groupBy(sites.id)
+    .orderBy(asc(sites.name));
+  return rows;
 }
 
 /** List all item sections (shared reference data for filters). */
