@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -11,33 +12,95 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { MasterItem } from "@/lib/types";
-import { formatRupiah } from "@/lib/utils";
+import { cn, formatRupiah } from "@/lib/utils";
+
+/** Columns the master item table can be sorted by. */
+export type MasterItemSortKey =
+  | "itemCode"
+  | "description"
+  | "brand"
+  | "price"
+  | "section";
+
+export interface MasterItemSort {
+  key: MasterItemSortKey;
+  dir: "asc" | "desc";
+}
 
 interface MasterItemTableProps {
   items: MasterItem[];
+  /** Current sort, used to render the header indicators. */
+  sort?: MasterItemSort;
+  /** Called when a sortable header is clicked. */
+  onSort?: (key: MasterItemSortKey) => void;
   /** Optional per-row action cell (edit/delete), rendered in the last column. */
   renderActions?: (item: MasterItem) => React.ReactNode;
 }
 
 /**
  * The master item catalog table (Admin). Lists Item Code, Description, Brand,
- * Size, Unit, Price, and Section. An optional actions column hosts edit/delete
- * controls when provided.
+ * Size, Unit, Price, and Section. Sortable columns show a direction indicator
+ * and call `onSort`. An optional actions column hosts edit/delete controls.
  */
-export function MasterItemTable({ items, renderActions }: MasterItemTableProps) {
+export function MasterItemTable({
+  items,
+  sort,
+  onSort,
+  renderActions,
+}: MasterItemTableProps) {
+  function SortHeader({
+    sortKey,
+    children,
+    className,
+  }: {
+    sortKey: MasterItemSortKey;
+    children: React.ReactNode;
+    className?: string;
+  }) {
+    if (!onSort) return <>{children}</>;
+    const active = sort?.key === sortKey;
+    const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 font-medium transition-colors hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground",
+          className,
+        )}
+      >
+        {children}
+        <Icon className="size-3.5" />
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-lg border">
       <Table>
         <TableHeader className="bg-muted/60">
           <TableRow>
             <TableHead className="w-10 text-center">No</TableHead>
-            <TableHead className="min-w-[110px]">Item Code</TableHead>
-            <TableHead className="min-w-[180px]">Description</TableHead>
-            <TableHead className="min-w-[120px]">Brand</TableHead>
+            <TableHead className="min-w-[110px]">
+              <SortHeader sortKey="itemCode">Item Code</SortHeader>
+            </TableHead>
+            <TableHead className="min-w-[180px]">
+              <SortHeader sortKey="description">Description</SortHeader>
+            </TableHead>
+            <TableHead className="min-w-[120px]">
+              <SortHeader sortKey="brand">Brand</SortHeader>
+            </TableHead>
             <TableHead className="min-w-[80px]">Size</TableHead>
             <TableHead className="min-w-[70px]">Unit</TableHead>
-            <TableHead className="min-w-[120px] text-right">Price</TableHead>
-            <TableHead className="min-w-[180px]">Section</TableHead>
+            <TableHead className="min-w-[120px] text-right">
+              <SortHeader sortKey="price" className="justify-end">
+                Price
+              </SortHeader>
+            </TableHead>
+            <TableHead className="min-w-[180px]">
+              <SortHeader sortKey="section">Section</SortHeader>
+            </TableHead>
             {renderActions && (
               <TableHead className="w-[120px] text-right">Aksi</TableHead>
             )}
