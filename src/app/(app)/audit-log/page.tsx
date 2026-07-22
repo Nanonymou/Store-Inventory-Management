@@ -13,7 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { AuditLogTable } from "@/components/audit-log-table";
+import { AuditLogTable, actionMeta } from "@/components/audit-log-table";
 import { MOCK_AUDIT_LOGS } from "@/lib/audit-mock";
 import { toISODate } from "@/lib/date";
 
@@ -23,6 +23,7 @@ import { toISODate } from "@/lib/date";
  */
 export default function AuditLogPage() {
   const [user, setUser] = React.useState<string>("all");
+  const [action, setAction] = React.useState<string>("all");
   const [from, setFrom] = React.useState<string>("");
   const [to, setTo] = React.useState<string>("");
 
@@ -32,10 +33,19 @@ export default function AuditLogPage() {
     return Array.from(names).sort((a, b) => a.localeCompare(b, "id"));
   }, []);
 
+  // Unique action types present in the log, labelled via actionMeta.
+  const actions = React.useMemo(() => {
+    const keys = new Set(MOCK_AUDIT_LOGS.map((l) => l.action));
+    return Array.from(keys)
+      .map((key) => ({ value: key, label: actionMeta(key).label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "id"));
+  }, []);
+
   const entries = React.useMemo(() => {
     return [...MOCK_AUDIT_LOGS]
       .filter((l) => {
         if (user !== "all" && l.userName !== user) return false;
+        if (action !== "all" && l.action !== action) return false;
         // Compare on the calendar date (inclusive bounds).
         const day = toISODate(new Date(l.createdAt));
         if (from && day < from) return false;
@@ -43,9 +53,10 @@ export default function AuditLogPage() {
         return true;
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [user, from, to]);
+  }, [user, action, from, to]);
 
-  const hasDateFilter = from !== "" || to !== "";
+  const hasFilter =
+    user !== "all" || action !== "all" || from !== "" || to !== "";
   const rangeInvalid = from !== "" && to !== "" && from > to;
 
   return (
@@ -84,6 +95,18 @@ export default function AuditLogPage() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="filter-action">Jenis Aksi</Label>
+              <Select
+                value={action}
+                onValueChange={setAction}
+                options={[
+                  { value: "all", label: "Semua Aksi" },
+                  ...actions,
+                ]}
+                className="w-full sm:w-[190px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="filter-from">Dari tanggal</Label>
               <Input
                 id="filter-from"
@@ -105,13 +128,14 @@ export default function AuditLogPage() {
                 className="w-full sm:w-[170px]"
               />
             </div>
-            {(hasDateFilter || user !== "all") && (
+            {hasFilter && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setUser("all");
+                  setAction("all");
                   setFrom("");
                   setTo("");
                 }}
