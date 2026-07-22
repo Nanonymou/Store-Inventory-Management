@@ -11,6 +11,7 @@ import {
   MapPin,
   Package,
   PackageSearch,
+  ScrollText,
   ShieldCheck,
   User,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard Stok", icon: LayoutDashboard },
   { href: "/transaksi", label: "Transaksi Harian", icon: ClipboardList },
   { href: "/master-item", label: "Master Item", icon: Boxes, adminOnly: true },
+  { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
 ];
 
 /**
