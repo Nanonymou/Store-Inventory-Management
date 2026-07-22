@@ -1,4 +1,4 @@
-import { ITEM_SECTIONS, type ItemSection } from "@/lib/types";
+import { ITEM_SECTIONS, type ItemSection, type MasterItem } from "@/lib/types";
 
 /** Raw form values for creating/editing a master item. */
 export interface ItemFormValues {
@@ -77,4 +77,17 @@ export function validateItemForm(
 
 export function hasErrors(errors: ItemFormErrors): boolean {
   return Object.keys(errors).length > 0;
+}
+
+/** Convert an existing master item into editable form values. */
+export function itemToFormValues(item: MasterItem): ItemFormValues {
+  return {
+    itemCode: item.itemCode,
+    description: item.description,
+    brand: item.brand ?? "",
+    size: item.size ?? "",
+    unit: item.unit ?? "",
+    price: String(item.price),
+    section: item.section,
+  };
 }

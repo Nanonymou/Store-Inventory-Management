@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Boxes, Plus, Search, X } from "lucide-react";
+import { Boxes, Pencil, Plus, Search, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -21,7 +21,10 @@ import {
 import { ItemForm } from "@/components/item-form";
 import { MOCK_MASTER_ITEMS } from "@/lib/mock-data";
 import { ITEM_SECTIONS, type ItemSection, type MasterItem } from "@/lib/types";
-import type { ItemFormValues } from "@/lib/master-item/validation";
+import {
+  itemToFormValues,
+  type ItemFormValues,
+} from "@/lib/master-item/validation";
 
 type SectionFilter = ItemSection | "all";
 
@@ -46,6 +49,7 @@ export default function MasterItemPage() {
   const [query, setQuery] = React.useState("");
   const [section, setSection] = React.useState<SectionFilter>("all");
   const [addOpen, setAddOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<MasterItem | null>(null);
   const [sort, setSort] = React.useState<MasterItemSort>({
     key: "itemCode",
     dir: "asc",
@@ -72,6 +76,27 @@ export default function MasterItemPage() {
     };
     setCatalog((prev) => [newItem, ...prev]);
     setAddOpen(false);
+  };
+
+  const handleEdit = (values: ItemFormValues) => {
+    if (!editing) return;
+    setCatalog((prev) =>
+      prev.map((item) =>
+        item.id === editing.id
+          ? {
+              ...item,
+              itemCode: values.itemCode,
+              description: values.description,
+              brand: values.brand,
+              size: values.size,
+              unit: values.unit,
+              price: Number(values.price),
+              section: values.section as ItemSection,
+            }
+          : item,
+      ),
+    );
+    setEditing(null);
   };
 
   const items = React.useMemo(() => {
@@ -156,7 +181,22 @@ export default function MasterItemPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <MasterItemTable items={items} sort={sort} onSort={handleSort} />
+          <MasterItemTable
+            items={items}
+            sort={sort}
+            onSort={handleSort}
+            renderActions={(item) => (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditing(item)}
+              >
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+            )}
+          />
         </CardContent>
       </Card>
 
@@ -177,6 +217,26 @@ export default function MasterItemPage() {
           onSubmit={handleAdd}
           onCancel={() => setAddOpen(false)}
         />
+      </Dialog>
+
+      <Dialog
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Edit Item"
+        description={
+          editing ? `Ubah detail untuk ${editing.itemCode}.` : undefined
+        }
+      >
+        {editing && (
+          <ItemForm
+            existingCodes={catalog.map((i) => i.itemCode)}
+            ownCode={editing.itemCode}
+            initial={itemToFormValues(editing)}
+            submitLabel="Simpan Perubahan"
+            onSubmit={handleEdit}
+            onCancel={() => setEditing(null)}
+          />
+        )}
       </Dialog>
     </main>
   );
