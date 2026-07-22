@@ -7,33 +7,45 @@ import {
   Boxes,
   ClipboardList,
   LayoutDashboard,
+  LogOut,
+  MapPin,
   Package,
   PackageSearch,
+  ShieldCheck,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { useSession } from "@/components/session-provider";
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard Stok", icon: LayoutDashboard },
   { href: "/transaksi", label: "Transaksi Harian", icon: ClipboardList },
-  { href: "/master-item", label: "Master Item", icon: Boxes },
+  { href: "/master-item", label: "Master Item", icon: Boxes, adminOnly: true },
 ];
 
 /**
  * Application shell: a sidebar of primary navigation (desktop) plus a top bar
- * with a horizontal nav for small screens. Wraps the authenticated pages so
- * they share consistent chrome.
+ * with the active-site picker, the signed-in user, and logout. Admin-only nav
+ * entries are hidden from Storemen.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { user, sites, activeSiteId, setActiveSiteId, isAdmin, logout } =
+    useSession();
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
+
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="flex min-h-screen">
@@ -49,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -71,14 +83,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — brand + mobile nav. */}
-        <header className="flex h-16 items-center justify-between gap-4 border-b px-4 sm:px-6">
+        {/* Top bar — brand, mobile nav, site picker, user, logout. */}
+        <header className="flex h-16 items-center gap-4 border-b px-4 sm:px-6">
           <div className="flex items-center gap-2 lg:hidden">
             <PackageSearch className="size-5 text-primary" />
             <span className="text-sm font-bold">StokMan</span>
           </div>
           <nav className="flex items-center gap-1 overflow-x-auto lg:hidden">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -93,8 +105,55 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto hidden text-xs text-muted-foreground lg:block">
-            Store Inventory Management
+
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {/* Active-site picker. */}
+            <div className="flex items-center gap-1.5">
+              <MapPin className="hidden size-4 text-muted-foreground sm:block" />
+              {isAdmin ? (
+                <Select
+                  value={activeSiteId}
+                  onValueChange={setActiveSiteId}
+                  options={sites.map((s) => ({
+                    value: s.id,
+                    label: `${s.name} — ${s.location}`,
+                  }))}
+                  className="w-[150px] sm:w-[220px]"
+                />
+              ) : (
+                <span className="text-sm font-medium">
+                  {sites[0]?.name ?? "—"}
+                </span>
+              )}
+            </div>
+
+            {/* User chip. */}
+            <span
+              className={cn(
+                "hidden items-center gap-1 rounded-full px-2 py-1 text-xs font-medium sm:inline-flex",
+                isAdmin
+                  ? "bg-primary/10 text-primary"
+                  : "bg-emerald-500/10 text-emerald-700",
+              )}
+            >
+              {isAdmin ? (
+                <ShieldCheck className="size-3" />
+              ) : (
+                <User className="size-3" />
+              )}
+              {user.name}
+            </span>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={logout}
+              aria-label="Keluar"
+            >
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">Keluar</span>
+            </Button>
           </div>
         </header>
 

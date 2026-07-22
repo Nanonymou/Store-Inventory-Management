@@ -18,11 +18,8 @@ import {
   type DashboardFilterState,
 } from "@/components/dashboard-filters";
 import { ExportButtons } from "@/components/export-buttons";
-import {
-  MOCK_MASTER_ITEMS,
-  MOCK_SITES,
-  mockDailyStockForSite,
-} from "@/lib/mock-data";
+import { useSession } from "@/components/session-provider";
+import { MOCK_MASTER_ITEMS, mockDailyStockForSite } from "@/lib/mock-data";
 import { todayISODate } from "@/lib/date";
 
 /**
@@ -32,20 +29,25 @@ import { todayISODate } from "@/lib/date";
  */
 export default function DashboardPage() {
   const today = todayISODate();
+  const { activeSite, activeSiteId, sites } = useSession();
 
   const [filters, setFilters] = React.useState<DashboardFilterState>({
-    siteId: MOCK_SITES[0].id,
+    siteId: activeSiteId,
     section: "all",
     query: "",
   });
 
-  const activeSite =
-    MOCK_SITES.find((s) => s.id === filters.siteId) ?? MOCK_SITES[0];
+  // Keep the filter's site in sync with the shell's active-site picker.
+  React.useEffect(() => {
+    setFilters((prev) =>
+      prev.siteId === activeSiteId ? prev : { ...prev, siteId: activeSiteId },
+    );
+  }, [activeSiteId]);
 
   // All rows for the selected site (mock).
   const allRows = React.useMemo(
-    () => mockDailyStockForSite(filters.siteId, today),
-    [filters.siteId, today],
+    () => mockDailyStockForSite(activeSiteId, today),
+    [activeSiteId, today],
   );
 
   // Apply section + keyword filters to the item catalog.
@@ -85,9 +87,10 @@ export default function DashboardPage() {
 
       {/* Filters & search. */}
       <DashboardFilters
-        sites={MOCK_SITES}
+        sites={sites}
         value={filters}
         onChange={setFilters}
+        canSwitchSite={false}
         actions={
           <ExportButtons
             items={filteredItems}
