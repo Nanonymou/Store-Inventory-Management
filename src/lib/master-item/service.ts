@@ -138,6 +138,55 @@ export async function createMasterItem(
   };
 }
 
+/**
+ * Update an existing master item. Validates the new item code's uniqueness
+ * (excluding the item itself) and resolves the section, then updates and returns
+ * the row. Throws 404 if the item does not exist.
+ */
+export async function updateMasterItem(
+  id: string,
+  input: MasterItemInput,
+): Promise<MasterItemDTO> {
+  const [existing] = await db
+    .select({ id: masterItems.id, isActive: masterItems.isActive })
+    .from(masterItems)
+    .where(eq(masterItems.id, id))
+    .limit(1);
+  if (!existing) {
+    throw new MasterItemError(404, "Item tidak ditemukan.");
+  }
+
+  const sectionId = await resolveSectionId(input.section);
+  await assertItemCodeUnique(input.itemCode, id);
+
+  await db
+    .update(masterItems)
+    .set({
+      itemCode: input.itemCode,
+      description: input.description,
+      brand: input.brand,
+      size: input.size,
+      unit: input.unit,
+      price: input.price,
+      sectionId,
+      updatedAt: new Date(),
+    })
+    .where(eq(masterItems.id, id));
+
+  return {
+    id,
+    itemCode: input.itemCode,
+    description: input.description,
+    brand: input.brand,
+    size: input.size,
+    unit: input.unit,
+    price: input.price,
+    section: input.section,
+    sectionId,
+    isActive: existing.isActive === 1,
+  };
+}
+
 export interface ListItemsFilters {
   /** Section name to filter by, or "all"/undefined for no filter. */
   section?: string;
