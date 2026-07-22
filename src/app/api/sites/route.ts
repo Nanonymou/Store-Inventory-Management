@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { AuthorizationError, requireUser } from "@/lib/auth/rbac";
+import { guardWithAudit } from "@/lib/auth/audit";
 import { listSitesForUser } from "@/lib/reference/service";
 
 // Reads the database + session — Node.js runtime required.
@@ -12,7 +13,11 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   try {
-    const user = requireUser(await getSession());
+    const session = await getSession();
+    const user = await guardWithAudit(() => requireUser(session), {
+      user: session,
+      resourceTarget: "sites:list",
+    });
     const sites = await listSitesForUser(user);
     return NextResponse.json({ ok: true, sites });
   } catch (err) {

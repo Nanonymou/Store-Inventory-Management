@@ -22,7 +22,11 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   try {
-    requireUser(await getSession());
+    const session = await getSession();
+    await guardWithAudit(() => requireUser(session), {
+      user: session,
+      resourceTarget: "master_items:list",
+    });
     const { searchParams } = new URL(req.url);
     const section = searchParams.get("section") ?? undefined;
     const query = searchParams.get("q") ?? undefined;

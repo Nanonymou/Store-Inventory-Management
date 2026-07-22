@@ -43,6 +43,13 @@ export async function POST(req: Request) {
   try {
     const result = await authenticate(email, password);
     if (!result) {
+      // Record the unauthorized attempt for security investigation.
+      await logActivity({
+        userId: null,
+        action: "login_failed",
+        resourceTarget: "session",
+        detail: `Percobaan login gagal untuk email: ${email}`,
+      });
       return NextResponse.json(
         { ok: false, error: "Email atau password salah." },
         { status: 401 },
