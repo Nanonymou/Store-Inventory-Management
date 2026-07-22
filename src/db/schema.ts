@@ -173,17 +173,28 @@ export const dailyStock = pgTable(
   }),
 );
 
-/** Audit trail of user activity (create / update / delete). */
-export const auditLogs = pgTable("audit_logs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-  action: varchar("action", { length: 60 }).notNull(),
-  resourceTarget: varchar("resource_target", { length: 240 }).notNull(),
-  detail: text("detail"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+/** Audit trail of user activity (create / update / delete / access). */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    action: varchar("action", { length: 60 }).notNull(),
+    resourceTarget: varchar("resource_target", { length: 240 }).notNull(),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // Query patterns: newest-first ordering and filtering by user / action.
+    createdIdx: index("idx_audit_logs_created").on(t.createdAt),
+    userIdx: index("idx_audit_logs_user").on(t.userId),
+    actionIdx: index("idx_audit_logs_action").on(t.action),
+  }),
+);
 
 /* --------------------------------------------------------------------------
  * Relations — enable type-safe joins (e.g. loading an item with its section).
