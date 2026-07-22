@@ -13,9 +13,29 @@ export function setClientSession(user: SessionUser): void {
   document.cookie = `${SESSION_COOKIE}=${serializeSession(user)}; path=/; max-age=${SESSION_MAX_AGE}; samesite=lax`;
 }
 
-/** Clear the mock session cookie (logout). */
+/** Prefix for any app-scoped browser storage, cleared on logout. */
+const STORAGE_PREFIX = "stokman:";
+
+/**
+ * Clear the mock session cookie AND any app-scoped local/session storage, so
+ * logging out leaves no client-side trace of the previous user. Safe to call in
+ * any browser context.
+ */
 export function clearClientSession(): void {
   document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0; samesite=lax`;
+
+  for (const storage of [
+    typeof localStorage !== "undefined" ? localStorage : null,
+    typeof sessionStorage !== "undefined" ? sessionStorage : null,
+  ]) {
+    if (!storage) continue;
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key && key.startsWith(STORAGE_PREFIX)) keys.push(key);
+    }
+    keys.forEach((k) => storage.removeItem(k));
+  }
 }
 
 /** Read the current mock session from the browser cookie, if any. */

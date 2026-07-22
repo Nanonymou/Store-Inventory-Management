@@ -24,6 +24,8 @@ function LoginForm() {
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
+  const idle = params.get("reason") === "idle";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -62,6 +64,12 @@ function LoginForm() {
           Masuk untuk mengelola stok harian.
         </p>
       </div>
+
+      {idle && (
+        <p className="mb-4 rounded-md bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-700">
+          Sesi berakhir karena tidak ada aktivitas. Silakan masuk kembali.
+        </p>
+      )}
 
       <form
         onSubmit={handleSubmit}

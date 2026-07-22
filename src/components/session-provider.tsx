@@ -15,7 +15,7 @@ interface SessionContextValue {
   setActiveSiteId: (siteId: string) => void;
   activeSite: Site;
   isAdmin: boolean;
-  logout: () => void;
+  logout: (reason?: "idle") => void;
 }
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
@@ -45,10 +45,36 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setChecked(true);
   }, [router]);
 
-  const logout = React.useCallback(() => {
-    clearClientSession();
-    router.replace("/login");
-  }, [router]);
+  const logout = React.useCallback(
+    (reason?: "idle") => {
+      clearClientSession();
+      const url = reason === "idle" ? "/login?reason=idle" : "/login";
+      router.replace(url);
+    },
+    [router],
+  );
+
+  // Auto-logout after 30 minutes of inactivity (PRD session security). Any user
+  // interaction resets the timer; on timeout the session is cleared.
+  React.useEffect(() => {
+    if (!checked || !user) return;
+    const IDLE_MS = 30 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => logout("idle"), IDLE_MS);
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart"] as const;
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [checked, user, logout]);
 
   if (!checked || !user) {
     return (

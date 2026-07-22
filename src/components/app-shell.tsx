@@ -148,7 +148,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={logout}
+              onClick={() => logout()}
               aria-label="Keluar"
             >
               <LogOut className="size-4" />
