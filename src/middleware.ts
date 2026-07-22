@@ -19,14 +19,11 @@ export function middleware(req: NextRequest) {
 
   const session = parseSession(req.cookies.get(SESSION_COOKIE)?.value);
 
-  if (isAdminOnlyPath(pathname)) {
-    // Not signed in → send to login, preserving where they were headed.
-    if (!session) {
-      const loginUrl = new URL("/login", req.url);
-      loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  if (isAdminOnlyPath(pathname) && session) {
     // Signed in but not an Admin → bounce to their transaction page.
+    // (Requiring a session at all — i.e. redirecting anonymous users to /login —
+    // is deferred to the Login feature, which introduces real sessions and the
+    // /login route. Until then admin pages stay reachable for UI development.)
     if (session.role !== "admin") {
       const home = new URL("/transaksi", req.url);
       home.searchParams.set("forbidden", "1");

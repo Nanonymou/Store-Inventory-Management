@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Boxes,
   ClipboardList,
   LayoutDashboard,
   Package,
@@ -20,6 +21,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard Stok", icon: LayoutDashboard },
   { href: "/transaksi", label: "Transaksi Harian", icon: ClipboardList },
+  { href: "/master-item", label: "Master Item", icon: Boxes },
 ];
 
 /**
