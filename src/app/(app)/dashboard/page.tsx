@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { DailyTransactionTable } from "@/components/daily-transaction-table";
+import { StockDashboardTable } from "@/components/stock-dashboard-table";
 import { MOCK_MASTER_ITEMS, MOCK_SITES, mockDailyStockForSite } from "@/lib/mock-data";
 import { todayISODate } from "@/lib/date";
 
@@ -80,7 +80,7 @@ export default function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <DailyTransactionTable items={MOCK_MASTER_ITEMS} rows={rows} />
+          <StockDashboardTable items={MOCK_MASTER_ITEMS} rows={rows} />
         </CardContent>
       </Card>
     </main>
