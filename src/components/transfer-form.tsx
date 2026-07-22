@@ -6,6 +6,7 @@ import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { MasterItem, Site } from "@/lib/types";
 
 export interface TransferFormValues {
@@ -160,14 +161,27 @@ export function TransferForm({
         />
       </Field>
 
-      {available !== null && (
-        <p className="text-xs text-muted-foreground">
-          Stok tersedia di{" "}
-          <span className="font-medium text-foreground">{fromSite?.name}</span>{" "}
-          untuk item ini:{" "}
-          <span className="font-semibold text-foreground">{available}</span>
-        </p>
-      )}
+      {available !== null &&
+        (() => {
+          const exceeded =
+            quantity.trim() !== "" && Number(quantity) > available;
+          return (
+            <p
+              className={cn(
+                "text-xs",
+                exceeded ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              Stok tersedia di{" "}
+              <span className="font-medium text-foreground">
+                {fromSite?.name}
+              </span>{" "}
+              untuk item ini:{" "}
+              <span className="font-semibold text-foreground">{available}</span>
+              {exceeded && " — melebihi stok yang tersedia."}
+            </p>
+          );
+        })()}
 
       <Field label="Jumlah (Qty)" error={errors.quantity} required>
         <Input

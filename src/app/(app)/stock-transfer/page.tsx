@@ -21,7 +21,11 @@ import {
   EMPTY_TRANSFER_FILTERS,
   type TransferFilterState,
 } from "@/components/transfer-filters";
-import { TransferForm, type TransferFormValues } from "@/components/transfer-form";
+import {
+  TransferForm,
+  type TransferFormErrors,
+  type TransferFormValues,
+} from "@/components/transfer-form";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
 import { MOCK_TRANSFERS, type StockTransfer } from "@/lib/transfer-mock";
 import {
@@ -78,6 +82,20 @@ export default function StockTransferPage() {
     (siteId: string, itemId: string) =>
       computeBalance(mockDailyStockRow(itemId, siteId, todayISODate())),
     [],
+  );
+
+  // Stock validation: a transfer cannot exceed the origin's available stock.
+  const validateStock = React.useCallback(
+    (values: TransferFormValues): TransferFormErrors => {
+      const available = getAvailableStock(values.fromSiteId, values.itemId);
+      if (values.quantity > available) {
+        return {
+          quantity: `Stok tidak cukup. Tersedia ${available} unit di site asal.`,
+        };
+      }
+      return {};
+    },
+    [getAvailableStock],
   );
 
   const handleSort = (key: TransferSortKey) => {
@@ -177,8 +195,8 @@ export default function StockTransferPage() {
 
       <p className="text-xs text-muted-foreground">
         Data pada halaman ini masih tiruan (mock) — transfer baru tersimpan di
-        sesi browser saja hingga backend tersambung. Validasi stok akan
-        ditambahkan pada langkah berikutnya.
+        sesi browser saja hingga backend tersambung. Jumlah transfer divalidasi
+        terhadap stok yang tersedia di site asal.
       </p>
 
       <Dialog
@@ -194,6 +212,7 @@ export default function StockTransferPage() {
           onSubmit={handleCreate}
           onCancel={() => setFormOpen(false)}
           getAvailableStock={getAvailableStock}
+          validateExtra={validateStock}
         />
       </Dialog>
     </main>
