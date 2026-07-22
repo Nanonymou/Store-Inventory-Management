@@ -179,6 +179,38 @@ export async function getDailyStock(siteId: string, date: string) {
     .where(and(eq(dailyStock.siteId, siteId), eq(dailyStock.recordDate, date)));
 }
 
+/** Beginning balance for one item, carried from the previous day's Balance. */
+export interface BeginningBalance {
+  itemId: string;
+  begBalance: number;
+}
+
+/**
+ * The Beginning Balances for a site + date: each active item's Beginning
+ * Balance equals the previous day's stored Balance (0 when there is no prior
+ * record). This is the source the daily form uses to auto-fill Beg. Balance.
+ */
+export async function getBeginningBalances(
+  siteId: string,
+  date: string,
+): Promise<BeginningBalance[]> {
+  const prevDate = previousISODate(date);
+  const [items, previous] = await Promise.all([
+    db
+      .select({ id: masterItems.id })
+      .from(masterItems)
+      .where(eq(masterItems.isActive, 1))
+      .orderBy(asc(masterItems.itemCode)),
+    getDailyStock(siteId, prevDate),
+  ]);
+
+  const prevBalanceByItem = new Map(previous.map((r) => [r.itemId, r.balance]));
+  return items.map((item) => ({
+    itemId: item.id,
+    begBalance: prevBalanceByItem.get(item.id) ?? 0,
+  }));
+}
+
 /** A composed row for the daily transaction view: item + movements + balance. */
 export interface DailyStockViewRow extends DailyStockMovements {
   itemId: string;
