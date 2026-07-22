@@ -7,6 +7,7 @@ import {
   type DailyStockMovements,
 } from "@/lib/types";
 import { isValidISODate, previousISODate } from "@/lib/date";
+import { logActivity } from "@/lib/auth/audit";
 
 /** Raised on invalid input; carries a 400 status for the route to surface. */
 export class ValidationError extends Error {
@@ -103,7 +104,7 @@ export function parseSaveDailyStockPayload(
 export async function saveDailyStock(
   payload: SaveDailyStockPayload,
   actorUserId: string | null,
-): Promise<{ saved: number }> {
+): Promise<{ saved: number; created: number; revised: number }> {
   const { siteId, date, entries } = payload;
 
   // Guard against unknown/ inactive items to keep referential integrity clear.
@@ -119,6 +120,20 @@ export async function saveDailyStock(
       `Item tidak dikenal: ${unknown.slice(0, 3).join(", ")}`,
     );
   }
+
+  // How many of these items already have a row for this day (→ revisions).
+  const existing = await db
+    .select({ itemId: dailyStock.itemId })
+    .from(dailyStock)
+    .where(
+      and(
+        eq(dailyStock.siteId, siteId),
+        eq(dailyStock.recordDate, date),
+        inArray(dailyStock.itemId, itemIds),
+      ),
+    );
+  const revisedCount = existing.length;
+  const createdCount = itemIds.length - revisedCount;
 
   const now = new Date();
   const values = entries.map((e) => ({
@@ -163,7 +178,15 @@ export async function saveDailyStock(
       },
     });
 
-  return { saved: values.length };
+  // Automatic audit trail for the transaction save (create vs. revise).
+  await logActivity({
+    userId: actorUserId,
+    action: revisedCount > 0 ? "revise_daily_stock" : "save_daily_stock",
+    resourceTarget: `daily_stock:${siteId}:${date}`,
+    detail: `Simpan transaksi harian ${date}: ${createdCount} entri baru, ${revisedCount} revisi.`,
+  });
+
+  return { saved: values.length, created: createdCount, revised: revisedCount };
 }
 
 /** Reference the conflicting row's incoming value (`excluded.<col>`). */

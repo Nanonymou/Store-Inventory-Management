@@ -5,7 +5,7 @@ import {
   assertCanEditDate,
   assertSiteAccess,
 } from "@/lib/auth/rbac";
-import { guardWithAudit, logActivity } from "@/lib/auth/audit";
+import { guardWithAudit } from "@/lib/auth/audit";
 import { isValidISODate, todayISODate } from "@/lib/date";
 import {
   ValidationError,
@@ -81,14 +81,8 @@ export async function POST(req: Request) {
       },
     );
 
+    // saveDailyStock records its own audit entry (create vs. revise).
     const result = await saveDailyStock(payload, user.id);
-
-    await logActivity({
-      userId: user.id,
-      action: "save_daily_stock",
-      resourceTarget: `daily_stock:${payload.siteId}:${payload.date}`,
-      detail: `Menyimpan ${result.saved} entri transaksi harian.`,
-    });
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
