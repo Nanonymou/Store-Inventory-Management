@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
   Boxes,
   ClipboardList,
   LayoutDashboard,
@@ -36,6 +37,12 @@ const MAIN_NAV: NavItem[] = [
 /** Admin-only administration pages (grouped under a section heading). */
 const ADMIN_NAV: NavItem[] = [
   { href: "/master-item", label: "Master Item", icon: Boxes, adminOnly: true },
+  {
+    href: "/stock-transfer",
+    label: "Stock Transfer",
+    icon: ArrowLeftRight,
+    adminOnly: true,
+  },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
 ];
 
