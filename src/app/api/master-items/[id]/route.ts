@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { AuthorizationError, requireAdmin } from "@/lib/auth/rbac";
-import { guardWithAudit, logActivity } from "@/lib/auth/audit";
+import { guardWithAudit } from "@/lib/auth/audit";
 import {
   MasterItemError,
   deleteMasterItem,
@@ -37,14 +37,8 @@ export async function PUT(
     }
 
     const input = parseMasterItemInput(body);
-    const item = await updateMasterItem(id, input);
-
-    await logActivity({
-      userId: admin.id,
-      action: "update_master_item",
-      resourceTarget: `master_item:${item.itemCode}`,
-      detail: `Mengubah item "${item.description}".`,
-    });
+    // updateMasterItem records its own audit entry.
+    const item = await updateMasterItem(id, input, admin.id);
 
     return NextResponse.json({ ok: true, item });
   } catch (err) {
@@ -69,20 +63,8 @@ export async function DELETE(
       resourceTarget: `master_items:delete:${id}`,
     });
 
-    const result = await deleteMasterItem(id);
-
-    await logActivity({
-      userId: admin.id,
-      action:
-        result.mode === "deleted"
-          ? "delete_master_item"
-          : "deactivate_master_item",
-      resourceTarget: `master_item:${result.itemCode}`,
-      detail:
-        result.mode === "deleted"
-          ? "Menghapus item."
-          : "Menonaktifkan item (punya riwayat stok).",
-    });
+    // deleteMasterItem records its own audit entry.
+    const result = await deleteMasterItem(id, admin.id);
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

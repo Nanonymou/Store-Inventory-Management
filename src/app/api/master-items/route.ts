@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { AuthorizationError, requireAdmin, requireUser } from "@/lib/auth/rbac";
-import { guardWithAudit, logActivity } from "@/lib/auth/audit";
+import { guardWithAudit } from "@/lib/auth/audit";
 import {
   MasterItemError,
   createMasterItem,
@@ -60,14 +60,8 @@ export async function POST(req: Request) {
     }
 
     const input = parseMasterItemInput(body);
-    const item = await createMasterItem(input);
-
-    await logActivity({
-      userId: admin.id,
-      action: "create_master_item",
-      resourceTarget: `master_item:${item.itemCode}`,
-      detail: `Menambah item "${item.description}".`,
-    });
+    // createMasterItem records its own audit entry.
+    const item = await createMasterItem(input, admin.id);
 
     return NextResponse.json({ ok: true, item }, { status: 201 });
   } catch (err) {

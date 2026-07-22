@@ -2,6 +2,7 @@ import { and, asc, count, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyStock, itemSections, masterItems } from "@/db/schema";
 import { ITEM_SECTIONS } from "@/lib/types";
+import { logActivity } from "@/lib/auth/audit";
 
 /** Raised on invalid item input (400) or a duplicate item code (409). */
 export class MasterItemError extends Error {
@@ -107,6 +108,7 @@ async function assertItemCodeUnique(
  */
 export async function createMasterItem(
   input: MasterItemInput,
+  actorUserId: string | null = null,
 ): Promise<MasterItemDTO> {
   const sectionId = await resolveSectionId(input.section);
   await assertItemCodeUnique(input.itemCode);
@@ -123,6 +125,13 @@ export async function createMasterItem(
       sectionId,
     })
     .returning({ id: masterItems.id });
+
+  await logActivity({
+    userId: actorUserId,
+    action: "create_master_item",
+    resourceTarget: `master_item:${input.itemCode}`,
+    detail: `Menambah item "${input.description}".`,
+  });
 
   return {
     id: created.id,
@@ -146,6 +155,7 @@ export async function createMasterItem(
 export async function updateMasterItem(
   id: string,
   input: MasterItemInput,
+  actorUserId: string | null = null,
 ): Promise<MasterItemDTO> {
   const [existing] = await db
     .select({ id: masterItems.id, isActive: masterItems.isActive })
@@ -173,6 +183,13 @@ export async function updateMasterItem(
     })
     .where(eq(masterItems.id, id));
 
+  await logActivity({
+    userId: actorUserId,
+    action: "update_master_item",
+    resourceTarget: `master_item:${input.itemCode}`,
+    detail: `Mengubah item "${input.description}".`,
+  });
+
   return {
     id,
     itemCode: input.itemCode,
@@ -198,7 +215,10 @@ export interface DeleteResult {
  * outright; if history exists it is soft-deleted (deactivated) so past records
  * keep referencing it. Throws 404 if the item does not exist.
  */
-export async function deleteMasterItem(id: string): Promise<DeleteResult> {
+export async function deleteMasterItem(
+  id: string,
+  actorUserId: string | null = null,
+): Promise<DeleteResult> {
   const [existing] = await db
     .select({ id: masterItems.id, itemCode: masterItems.itemCode })
     .from(masterItems)
@@ -213,16 +233,27 @@ export async function deleteMasterItem(id: string): Promise<DeleteResult> {
     .from(dailyStock)
     .where(eq(dailyStock.itemId, id));
 
+  const mode: DeleteResult["mode"] = refs > 0 ? "deactivated" : "deleted";
   if (refs > 0) {
     await db
       .update(masterItems)
       .set({ isActive: 0, updatedAt: new Date() })
       .where(eq(masterItems.id, id));
-    return { mode: "deactivated", itemCode: existing.itemCode };
+  } else {
+    await db.delete(masterItems).where(eq(masterItems.id, id));
   }
 
-  await db.delete(masterItems).where(eq(masterItems.id, id));
-  return { mode: "deleted", itemCode: existing.itemCode };
+  await logActivity({
+    userId: actorUserId,
+    action: mode === "deleted" ? "delete_master_item" : "deactivate_master_item",
+    resourceTarget: `master_item:${existing.itemCode}`,
+    detail:
+      mode === "deleted"
+        ? "Menghapus item."
+        : "Menonaktifkan item (punya riwayat stok).",
+  });
+
+  return { mode, itemCode: existing.itemCode };
 }
 
 export interface ListItemsFilters {
