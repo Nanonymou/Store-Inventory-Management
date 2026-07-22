@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportStockToExcel } from "@/lib/export/excel";
+import { exportStockToPdf } from "@/lib/export/pdf";
 import type { StockReportMeta } from "@/lib/export/stock-report";
 import type { DailyStockRow, MasterItem } from "@/lib/types";
 
@@ -15,8 +16,7 @@ interface ExportButtonsProps {
 
 /**
  * Report export actions for the dashboard. Exports the currently displayed
- * (already filtered) stock view. Excel export is available here; PDF is added
- * alongside it.
+ * (already filtered) stock view to Excel or a print-ready PDF.
  */
 export function ExportButtons({ items, rows, meta }: ExportButtonsProps) {
   const disabled = items.length === 0;
@@ -32,6 +32,16 @@ export function ExportButtons({ items, rows, meta }: ExportButtonsProps) {
       >
         <FileSpreadsheet className="size-4" />
         Export Excel
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => exportStockToPdf(items, rows, meta)}
+      >
+        <FileText className="size-4" />
+        Export PDF
       </Button>
     </div>
   );
