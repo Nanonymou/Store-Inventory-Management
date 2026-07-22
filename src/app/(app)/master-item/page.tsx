@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Boxes, Search, X } from "lucide-react";
+import { Boxes, Plus, Search, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,13 +12,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import {
   MasterItemTable,
   type MasterItemSort,
   type MasterItemSortKey,
 } from "@/components/master-item-table";
+import { ItemForm } from "@/components/item-form";
 import { MOCK_MASTER_ITEMS } from "@/lib/mock-data";
 import { ITEM_SECTIONS, type ItemSection, type MasterItem } from "@/lib/types";
+import type { ItemFormValues } from "@/lib/master-item/validation";
 
 type SectionFilter = ItemSection | "all";
 
@@ -38,8 +41,11 @@ function compareItems(
  * arrive next.
  */
 export default function MasterItemPage() {
+  // Local catalog state (mock) so newly added items appear immediately.
+  const [catalog, setCatalog] = React.useState<MasterItem[]>(MOCK_MASTER_ITEMS);
   const [query, setQuery] = React.useState("");
   const [section, setSection] = React.useState<SectionFilter>("all");
+  const [addOpen, setAddOpen] = React.useState(false);
   const [sort, setSort] = React.useState<MasterItemSort>({
     key: "itemCode",
     dir: "asc",
@@ -53,9 +59,24 @@ export default function MasterItemPage() {
     );
   };
 
+  const handleAdd = (values: ItemFormValues) => {
+    const newItem: MasterItem = {
+      id: `item-${Date.now()}`,
+      itemCode: values.itemCode,
+      description: values.description,
+      brand: values.brand,
+      size: values.size,
+      unit: values.unit,
+      price: Number(values.price),
+      section: values.section as ItemSection,
+    };
+    setCatalog((prev) => [newItem, ...prev]);
+    setAddOpen(false);
+  };
+
   const items = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = MOCK_MASTER_ITEMS.filter((item) => {
+    const filtered = catalog.filter((item) => {
       if (section !== "all" && item.section !== section) return false;
       if (!q) return true;
       return (
@@ -67,21 +88,28 @@ export default function MasterItemPage() {
     const sorted = [...filtered].sort((a, b) => compareItems(a, b, sort.key));
     if (sort.dir === "desc") sorted.reverse();
     return sorted;
-  }, [query, section, sort]);
+  }, [catalog, query, section, sort]);
 
   const isFiltered = query.trim() !== "" || section !== "all";
 
   return (
     <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Boxes className="size-4" />
-          <span>StokMan — Master Data</span>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Boxes className="size-4" />
+            <span>StokMan — Master Data</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Manajemen Item</h1>
+          <p className="text-sm text-muted-foreground">
+            Katalog barang baku yang dikelola Admin — dasar input transaksi
+            harian.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Manajemen Item</h1>
-        <p className="text-sm text-muted-foreground">
-          Katalog barang baku yang dikelola Admin — dasar input transaksi harian.
-        </p>
+        <Button type="button" onClick={() => setAddOpen(true)}>
+          <Plus className="size-4" />
+          Tambah Item
+        </Button>
       </header>
 
       <Card>
@@ -89,7 +117,7 @@ export default function MasterItemPage() {
           <div className="space-y-1">
             <CardTitle>Daftar Item</CardTitle>
             <CardDescription>
-              {items.length} dari {MOCK_MASTER_ITEMS.length} item
+              {items.length} dari {catalog.length} item
             </CardDescription>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -133,9 +161,23 @@ export default function MasterItemPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock). Fitur tambah, edit, dan hapus
-        item akan ditambahkan pada langkah berikutnya.
+        Data pada halaman ini masih tiruan (mock) — item baru tersimpan di sesi
+        browser saja hingga backend tersambung. Fitur edit dan hapus menyusul.
       </p>
+
+      <Dialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Tambah Item"
+        description="Masukkan detail item baru. Item Code harus unik."
+      >
+        <ItemForm
+          existingCodes={catalog.map((i) => i.itemCode)}
+          submitLabel="Tambah"
+          onSubmit={handleAdd}
+          onCancel={() => setAddOpen(false)}
+        />
+      </Dialog>
     </main>
   );
 }
