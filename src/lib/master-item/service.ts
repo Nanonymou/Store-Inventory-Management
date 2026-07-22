@@ -1,6 +1,142 @@
-import { and, asc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { itemSections, masterItems } from "@/db/schema";
+import { ITEM_SECTIONS } from "@/lib/types";
+
+/** Raised on invalid item input (400) or a duplicate item code (409). */
+export class MasterItemError extends Error {
+  constructor(
+    public readonly status: 400 | 404 | 409,
+    message: string,
+  ) {
+    super(message);
+    this.name = "MasterItemError";
+  }
+}
+
+/** Validated, normalized fields for creating/updating a master item. */
+export interface MasterItemInput {
+  itemCode: string;
+  description: string;
+  brand: string | null;
+  size: string | null;
+  unit: string | null;
+  price: number;
+  section: string;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function optionalStr(value: unknown): string | null {
+  const s = str(value);
+  return s === "" ? null : s;
+}
+
+/** Parse and validate a raw request body into MasterItemInput. */
+export function parseMasterItemInput(body: unknown): MasterItemInput {
+  if (typeof body !== "object" || body === null) {
+    throw new MasterItemError(400, "Body permintaan tidak valid.");
+  }
+  const b = body as Record<string, unknown>;
+
+  const itemCode = str(b.itemCode);
+  if (!itemCode) throw new MasterItemError(400, "Item Code wajib diisi.");
+
+  const description = str(b.description);
+  if (!description) throw new MasterItemError(400, "Description wajib diisi.");
+
+  const priceNum = typeof b.price === "number" ? b.price : Number(b.price);
+  if (!Number.isFinite(priceNum) || Number.isNaN(priceNum)) {
+    throw new MasterItemError(400, "Price harus berupa angka.");
+  }
+  if (priceNum < 0) throw new MasterItemError(400, "Price tidak boleh negatif.");
+
+  const section = str(b.section);
+  if (!(ITEM_SECTIONS as readonly string[]).includes(section)) {
+    throw new MasterItemError(400, "Section tidak valid.");
+  }
+
+  return {
+    itemCode,
+    description,
+    brand: optionalStr(b.brand),
+    size: optionalStr(b.size),
+    unit: optionalStr(b.unit),
+    price: priceNum,
+    section,
+  };
+}
+
+/** Resolve a section name to its id, or 404 if unknown. */
+async function resolveSectionId(section: string): Promise<string> {
+  const [row] = await db
+    .select({ id: itemSections.id })
+    .from(itemSections)
+    .where(eq(itemSections.name, section))
+    .limit(1);
+  if (!row) {
+    throw new MasterItemError(404, `Section "${section}" belum terdaftar.`);
+  }
+  return row.id;
+}
+
+/** Throw 409 if an item code already exists (case-insensitive), excluding `exceptId`. */
+async function assertItemCodeUnique(
+  itemCode: string,
+  exceptId?: string,
+): Promise<void> {
+  const clash = and(
+    ilike(masterItems.itemCode, itemCode),
+    exceptId ? sql`${masterItems.id} <> ${exceptId}` : undefined,
+  );
+  const [row] = await db
+    .select({ id: masterItems.id })
+    .from(masterItems)
+    .where(clash)
+    .limit(1);
+  if (row) {
+    throw new MasterItemError(409, `Item Code "${itemCode}" sudah dipakai.`);
+  }
+}
+
+/**
+ * Create a new master item. Validates uniqueness of the item code and resolves
+ * the section, then inserts and returns the created row as a DTO.
+ */
+export async function createMasterItem(
+  input: MasterItemInput,
+): Promise<MasterItemDTO> {
+  const sectionId = await resolveSectionId(input.section);
+  await assertItemCodeUnique(input.itemCode);
+
+  const [created] = await db
+    .insert(masterItems)
+    .values({
+      itemCode: input.itemCode,
+      description: input.description,
+      brand: input.brand,
+      size: input.size,
+      unit: input.unit,
+      price: input.price,
+      sectionId,
+    })
+    .returning({ id: masterItems.id });
+
+  return {
+    id: created.id,
+    itemCode: input.itemCode,
+    description: input.description,
+    brand: input.brand,
+    size: input.size,
+    unit: input.unit,
+    price: input.price,
+    section: input.section,
+    sectionId,
+    isActive: true,
+  };
+}
 
 export interface ListItemsFilters {
   /** Section name to filter by, or "all"/undefined for no filter. */
