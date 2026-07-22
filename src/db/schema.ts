@@ -1,6 +1,8 @@
+import { relations } from "drizzle-orm";
 import {
   date,
   doublePrecision,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -55,26 +57,34 @@ export const users = pgTable("users", {
 });
 
 /** Master item catalog (Admin-managed). */
-export const masterItems = pgTable("master_items", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  itemCode: varchar("item_code", { length: 60 }).notNull().unique(),
-  description: varchar("description", { length: 240 }).notNull(),
-  brand: varchar("brand", { length: 120 }),
-  size: varchar("size", { length: 60 }),
-  unit: varchar("unit", { length: 40 }),
-  price: doublePrecision("price").notNull().default(0),
-  sectionId: uuid("section_id")
-    .notNull()
-    .references(() => itemSections.id, { onDelete: "restrict" }),
-  /** Soft-delete flag so historical stock rows keep referencing the item. */
-  isActive: integer("is_active").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const masterItems = pgTable(
+  "master_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemCode: varchar("item_code", { length: 60 }).notNull().unique(),
+    description: varchar("description", { length: 240 }).notNull(),
+    brand: varchar("brand", { length: 120 }),
+    size: varchar("size", { length: 60 }),
+    unit: varchar("unit", { length: 40 }),
+    price: doublePrecision("price").notNull().default(0),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => itemSections.id, { onDelete: "restrict" }),
+    /** Soft-delete flag so historical stock rows keep referencing the item. */
+    isActive: integer("is_active").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // Speeds up section filtering and the "active catalog" listing.
+    sectionIdx: index("idx_master_items_section").on(t.sectionId),
+    activeIdx: index("idx_master_items_active").on(t.isActive),
+  }),
+);
 
 /**
  * Daily stock — the heart of the daily transaction feature. One row per
@@ -127,6 +137,9 @@ export const dailyStock = pgTable(
       t.itemId,
       t.siteId,
     ),
+    // Primary access pattern: all rows for a site on a given date.
+    siteDateIdx: index("idx_daily_stock_site_date").on(t.siteId, t.recordDate),
+    itemIdx: index("idx_daily_stock_item").on(t.itemId),
   }),
 );
 
@@ -142,10 +155,59 @@ export const auditLogs = pgTable("audit_logs", {
     .defaultNow(),
 });
 
+/* --------------------------------------------------------------------------
+ * Relations — enable type-safe joins (e.g. loading an item with its section).
+ * These are ORM-level only and do not alter the SQL schema.
+ * ------------------------------------------------------------------------ */
+
+export const itemSectionsRelations = relations(itemSections, ({ many }) => ({
+  items: many(masterItems),
+}));
+
+export const masterItemsRelations = relations(masterItems, ({ one, many }) => ({
+  section: one(itemSections, {
+    fields: [masterItems.sectionId],
+    references: [itemSections.id],
+  }),
+  dailyStock: many(dailyStock),
+}));
+
+export const sitesRelations = relations(sites, ({ many }) => ({
+  users: many(users),
+  dailyStock: many(dailyStock),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  site: one(sites, {
+    fields: [users.siteId],
+    references: [sites.id],
+  }),
+  auditLogs: many(auditLogs),
+}));
+
+export const dailyStockRelations = relations(dailyStock, ({ one }) => ({
+  item: one(masterItems, {
+    fields: [dailyStock.itemId],
+    references: [masterItems.id],
+  }),
+  site: one(sites, {
+    fields: [dailyStock.siteId],
+    references: [sites.id],
+  }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [auditLogs.userId],
+    references: [users.id],
+  }),
+}));
+
 export type ItemSectionRow = typeof itemSections.$inferSelect;
 export type SiteRow = typeof sites.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type MasterItemRow = typeof masterItems.$inferSelect;
+export type NewMasterItemRow = typeof masterItems.$inferInsert;
 export type DailyStockRow = typeof dailyStock.$inferSelect;
 export type NewDailyStockRow = typeof dailyStock.$inferInsert;
 export type AuditLogRow = typeof auditLogs.$inferSelect;
