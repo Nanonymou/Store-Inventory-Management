@@ -16,7 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { Search, X } from "lucide-react";
-import { AdjustmentHistoryTable } from "@/components/adjustment-history-table";
+import {
+  AdjustmentHistoryTable,
+  type AdjustmentSort,
+  type AdjustmentSortKey,
+} from "@/components/adjustment-history-table";
 import {
   AdjustmentForm,
   type AdjustmentFormValues,
@@ -25,6 +29,7 @@ import { useRequireAdmin } from "@/hooks/use-require-admin";
 import {
   ADJUSTMENT_REASONS,
   MOCK_ADJUSTMENTS,
+  adjustmentDifference,
   type StockAdjustment,
 } from "@/lib/adjustment-mock";
 import {
@@ -49,6 +54,10 @@ export default function StockAdjustmentPage() {
   const [siteFilter, setSiteFilter] = React.useState("all");
   const [reasonFilter, setReasonFilter] = React.useState("all");
   const [query, setQuery] = React.useState("");
+  const [sort, setSort] = React.useState<AdjustmentSort>({
+    key: "date",
+    dir: "desc",
+  });
   // Local applied-stock overrides so an adjustment takes effect immediately:
   // once saved, the current stock for that (site, item) reflects the new value.
   const [applied, setApplied] = React.useState<Record<string, number>>({});
@@ -106,6 +115,14 @@ export default function StockAdjustmentPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "id"));
   }, [adjustments]);
 
+  const handleSort = (key: AdjustmentSortKey) => {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "desc" },
+    );
+  };
+
   const sorted = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     return [...adjustments]
@@ -121,8 +138,14 @@ export default function StockAdjustmentPage() {
         }
         return true;
       })
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [adjustments, siteFilter, reasonFilter, query]);
+      .sort((a, b) => {
+        const cmp =
+          sort.key === "difference"
+            ? adjustmentDifference(a) - adjustmentDifference(b)
+            : a.date.localeCompare(b.date);
+        return sort.dir === "asc" ? cmp : -cmp;
+      });
+  }, [adjustments, siteFilter, reasonFilter, query, sort]);
 
   const hasFilter =
     siteFilter !== "all" || reasonFilter !== "all" || query.trim() !== "";
@@ -255,7 +278,11 @@ export default function StockAdjustmentPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <AdjustmentHistoryTable adjustments={sorted} />
+          <AdjustmentHistoryTable
+            adjustments={sorted}
+            sort={sort}
+            onSort={handleSort}
+          />
         </CardContent>
       </Card>
 

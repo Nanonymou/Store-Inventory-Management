@@ -1,7 +1,9 @@
 "use client";
 
+import * as React from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -17,26 +19,75 @@ import {
   type StockAdjustment,
 } from "@/lib/adjustment-mock";
 
+/** Columns the adjustment history can be sorted by. */
+export type AdjustmentSortKey = "date" | "difference";
+
+export interface AdjustmentSort {
+  key: AdjustmentSortKey;
+  dir: "asc" | "desc";
+}
+
+interface AdjustmentHistoryTableProps {
+  adjustments: StockAdjustment[];
+  sort?: AdjustmentSort;
+  onSort?: (key: AdjustmentSortKey) => void;
+}
+
 /**
  * The stock adjustment (opname) history table: date, site, item, before →
- * after, signed difference, reason, and who adjusted it. Read-only.
+ * after, signed difference, reason, and who adjusted it. Date and difference
+ * columns are sortable. Read-only.
  */
 export function AdjustmentHistoryTable({
   adjustments,
-}: {
-  adjustments: StockAdjustment[];
-}) {
+  sort,
+  onSort,
+}: AdjustmentHistoryTableProps) {
+  function SortHeader({
+    sortKey,
+    children,
+    className,
+  }: {
+    sortKey: AdjustmentSortKey;
+    children: React.ReactNode;
+    className?: string;
+  }) {
+    if (!onSort) return <>{children}</>;
+    const active = sort?.key === sortKey;
+    const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 font-medium transition-colors hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground",
+          className,
+        )}
+      >
+        {children}
+        <Icon className="size-3.5" />
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-lg border">
       <Table>
         <TableHeader className="bg-muted/60">
           <TableRow>
-            <TableHead className="min-w-[120px]">Tanggal</TableHead>
+            <TableHead className="min-w-[120px]">
+              <SortHeader sortKey="date">Tanggal</SortHeader>
+            </TableHead>
             <TableHead className="min-w-[90px]">Site</TableHead>
             <TableHead className="min-w-[180px]">Item</TableHead>
             <TableHead className="min-w-[80px] text-right">Sebelum</TableHead>
             <TableHead className="min-w-[80px] text-right">Sesudah</TableHead>
-            <TableHead className="min-w-[90px] text-right">Selisih</TableHead>
+            <TableHead className="min-w-[90px] text-right">
+              <SortHeader sortKey="difference" className="justify-end">
+                Selisih
+              </SortHeader>
+            </TableHead>
             <TableHead className="min-w-[120px]">Alasan</TableHead>
             <TableHead className="min-w-[130px]">Oleh</TableHead>
           </TableRow>
