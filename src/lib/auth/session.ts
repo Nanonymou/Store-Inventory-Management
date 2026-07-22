@@ -11,6 +11,20 @@ import type { SessionUser, UserRole } from "@/lib/types";
  */
 export const SESSION_COOKIE = "stokman_session";
 
+/** Session lifetime in seconds — 8 hours, matching the daily operating window. */
+export const SESSION_MAX_AGE = 8 * 60 * 60;
+
+/** httpOnly cookie options for the real (server-set) session. */
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  };
+}
+
 interface RawSession {
   id?: string;
   name?: string;
