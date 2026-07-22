@@ -150,7 +150,8 @@ export default function DailyTransactionPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-xs text-muted-foreground">
           Data pada halaman ini masih tiruan (mock) untuk pengembangan
-          antarmuka. Balance = Beginning Balance + Receiving − Regular − Snack −
+          antarmuka. Beginning Balance terisi otomatis dari Balance hari
+          sebelumnya. Balance = Beginning Balance + Receiving − Regular − Snack −
           Backcharge − HKL − Event − Ent − TO − Spoil. Nilai Rupiah dihitung
           otomatis dari Price × Qty tiap kolom.
         </p>

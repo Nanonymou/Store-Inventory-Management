@@ -45,6 +45,7 @@ function MovementCell({
   isOutflow,
   editable,
   showValue,
+  auto,
   onChange,
 }: {
   value: number;
@@ -52,12 +53,27 @@ function MovementCell({
   isOutflow: boolean;
   editable: boolean;
   showValue: boolean;
+  /** Auto-computed column (e.g. Beginning Balance) — never directly editable. */
+  auto?: boolean;
   onChange: (next: number) => void;
 }) {
   if (showValue) {
     return (
       <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
         {formatRupiah(price * value)}
+      </TableCell>
+    );
+  }
+
+  // Auto-computed cells (Beginning Balance) are read-only even in input mode;
+  // the value is carried over from the previous day's Balance.
+  if (auto) {
+    return (
+      <TableCell
+        title="Otomatis dari Balance hari sebelumnya"
+        className="text-right tabular-nums text-muted-foreground"
+      >
+        {formatNumber(value)}
       </TableCell>
     );
   }
@@ -151,6 +167,14 @@ export function DailyTransactionTable({
                 )}
               >
                 {col.label}
+                {col.auto && (
+                  <span
+                    className="ml-1 text-[10px] font-normal text-muted-foreground"
+                    title="Otomatis dari Balance hari sebelumnya"
+                  >
+                    (auto)
+                  </span>
+                )}
               </TableHead>
             ))}
             <TableHead className="min-w-[96px] text-right font-semibold">
@@ -193,6 +217,7 @@ export function DailyTransactionTable({
                     isOutflow={col.isOutflow}
                     editable={editable}
                     showValue={showValue}
+                    auto={col.auto}
                     onChange={(next) => onCellChange?.(item.id, col.key, next)}
                   />
                 ))}

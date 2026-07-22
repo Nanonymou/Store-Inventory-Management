@@ -59,8 +59,10 @@ export const MOVEMENT_COLUMNS: {
   label: string;
   /** Whether the movement subtracts from the balance. */
   isOutflow: boolean;
+  /** Auto-computed (not directly editable) — e.g. Beginning Balance. */
+  auto?: boolean;
 }[] = [
-  { key: "begBalance", label: "Beg. Balance", isOutflow: false },
+  { key: "begBalance", label: "Beg. Balance", isOutflow: false, auto: true },
   { key: "receiving", label: "Receiving", isOutflow: false },
   { key: "regular", label: "Regular", isOutflow: true },
   { key: "snack", label: "Snack", isOutflow: true },
