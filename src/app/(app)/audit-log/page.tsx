@@ -16,7 +16,7 @@ import {
   type AuditFilterState,
 } from "@/components/audit-log-filters";
 import { MOCK_AUDIT_LOGS } from "@/lib/audit-mock";
-import { toISODate } from "@/lib/date";
+import { useAuditLogs } from "@/hooks/use-audit-logs";
 
 /**
  * Audit Log (Admin only). Integrates the user, action-type, and date-range
@@ -40,20 +40,8 @@ export default function AuditLogPage() {
       .sort((a, b) => a.label.localeCompare(b.label, "id"));
   }, []);
 
-  const entries = React.useMemo(() => {
-    return [...MOCK_AUDIT_LOGS]
-      .filter((l) => {
-        if (filters.user !== "all" && l.userName !== filters.user) return false;
-        if (filters.action !== "all" && l.action !== filters.action) {
-          return false;
-        }
-        const day = toISODate(new Date(l.createdAt));
-        if (filters.from && day < filters.from) return false;
-        if (filters.to && day > filters.to) return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [filters]);
+  // Fetch from the backend (falls back to filtered mock until the API exists).
+  const { entries, isLoading, usingMock } = useAuditLogs(filters);
 
   return (
     <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -74,7 +62,9 @@ export default function AuditLogPage() {
           <div className="space-y-1">
             <CardTitle>Aktivitas Sistem</CardTitle>
             <CardDescription>
-              {entries.length} dari {MOCK_AUDIT_LOGS.length} aktivitas
+              {isLoading
+                ? "Memuat…"
+                : `${entries.length} aktivitas${usingMock ? " (data tiruan)" : ""}`}
             </CardDescription>
           </div>
           <AuditLogFilters
@@ -85,7 +75,7 @@ export default function AuditLogPage() {
           />
         </CardHeader>
         <CardContent className="p-0">
-          <AuditLogTable entries={entries} />
+          <AuditLogTable entries={entries} isLoading={isLoading} />
         </CardContent>
       </Card>
 
