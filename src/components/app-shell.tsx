@@ -14,6 +14,7 @@ import {
   PackageSearch,
   ScrollText,
   ShieldCheck,
+  SlidersHorizontal,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,12 @@ const ADMIN_NAV: NavItem[] = [
     href: "/stock-transfer",
     label: "Stock Transfer",
     icon: ArrowLeftRight,
+    adminOnly: true,
+  },
+  {
+    href: "/stock-adjustment",
+    label: "Stock Adjustment",
+    icon: SlidersHorizontal,
     adminOnly: true,
   },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
