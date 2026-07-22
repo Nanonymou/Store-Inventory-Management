@@ -13,13 +13,17 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import {
   MasterItemTable,
   type MasterItemSort,
   type MasterItemSortKey,
 } from "@/components/master-item-table";
 import { ItemForm } from "@/components/item-form";
-import { MOCK_MASTER_ITEMS } from "@/lib/mock-data";
+import { useRequireAdmin } from "@/hooks/use-require-admin";
+import { useAsync } from "@/hooks/use-async";
+import { apiGet, apiSend, ApiError } from "@/lib/api/client";
+import { toMasterItem, type ApiMasterItem } from "@/lib/api/types";
 import { ITEM_SECTIONS, type ItemSection, type MasterItem } from "@/lib/types";
 import {
   itemToFormValues,
@@ -28,7 +32,6 @@ import {
 
 type SectionFilter = ItemSection | "all";
 
-/** Compare two items by a sort key (numeric for price, locale for the rest). */
 function compareItems(
   a: MasterItem,
   b: MasterItem,
@@ -38,23 +41,49 @@ function compareItems(
   return String(a[key] ?? "").localeCompare(String(b[key] ?? ""), "id");
 }
 
-/**
- * Master Item catalog (Admin). Adds keyword search, section filter, and
- * sortable columns over the item list (mock data). Add / edit / delete controls
- * arrive next.
- */
+/** Build the API payload from the form values. */
+function toItemPayload(v: ItemFormValues) {
+  return {
+    itemCode: v.itemCode,
+    description: v.description,
+    brand: v.brand || null,
+    size: v.size || null,
+    unit: v.unit || null,
+    price: Number(v.price),
+    section: v.section,
+  };
+}
+
+/** Master Item catalog (Admin), backed by /api/master-items. */
 export default function MasterItemPage() {
-  // Local catalog state (mock) so newly added items appear immediately.
-  const [catalog, setCatalog] = React.useState<MasterItem[]>(MOCK_MASTER_ITEMS);
+  const isAdmin = useRequireAdmin();
+  const { toast } = useToast();
+
+  const {
+    data,
+    loading,
+    error,
+    reload,
+  } = useAsync(
+    () => apiGet<{ items: ApiMasterItem[] }>("/api/master-items"),
+    [],
+  );
+
   const [query, setQuery] = React.useState("");
   const [section, setSection] = React.useState<SectionFilter>("all");
   const [addOpen, setAddOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<MasterItem | null>(null);
   const [deleting, setDeleting] = React.useState<MasterItem | null>(null);
+  const [busy, setBusy] = React.useState(false);
   const [sort, setSort] = React.useState<MasterItemSort>({
     key: "itemCode",
     dir: "asc",
   });
+
+  const catalog = React.useMemo(
+    () => (data?.items ?? []).map(toMasterItem),
+    [data],
+  );
 
   const handleSort = (key: MasterItemSortKey) => {
     setSort((prev) =>
@@ -64,46 +93,69 @@ export default function MasterItemPage() {
     );
   };
 
-  const handleAdd = (values: ItemFormValues) => {
-    const newItem: MasterItem = {
-      id: `item-${Date.now()}`,
-      itemCode: values.itemCode,
-      description: values.description,
-      brand: values.brand,
-      size: values.size,
-      unit: values.unit,
-      price: Number(values.price),
-      section: values.section as ItemSection,
-    };
-    setCatalog((prev) => [newItem, ...prev]);
-    setAddOpen(false);
+  const handleAdd = async (values: ItemFormValues) => {
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/master-items", toItemPayload(values));
+      toast({ variant: "success", title: `Item ${values.itemCode} ditambahkan.` });
+      setAddOpen(false);
+      reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal menambah item",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleEdit = (values: ItemFormValues) => {
+  const handleEdit = async (values: ItemFormValues) => {
     if (!editing) return;
-    setCatalog((prev) =>
-      prev.map((item) =>
-        item.id === editing.id
-          ? {
-              ...item,
-              itemCode: values.itemCode,
-              description: values.description,
-              brand: values.brand,
-              size: values.size,
-              unit: values.unit,
-              price: Number(values.price),
-              section: values.section as ItemSection,
-            }
-          : item,
-      ),
-    );
-    setEditing(null);
+    setBusy(true);
+    try {
+      await apiSend("PUT", `/api/master-items/${editing.id}`, toItemPayload(values));
+      toast({ variant: "success", title: `Item ${values.itemCode} diperbarui.` });
+      setEditing(null);
+      reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui item",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleting) return;
-    setCatalog((prev) => prev.filter((item) => item.id !== deleting.id));
-    setDeleting(null);
+    setBusy(true);
+    try {
+      const res = await apiSend<{ mode: string }>(
+        "DELETE",
+        `/api/master-items/${deleting.id}`,
+      );
+      toast({
+        variant: "success",
+        title:
+          res.mode === "deleted"
+            ? `Item ${deleting.itemCode} dihapus.`
+            : `Item ${deleting.itemCode} dinonaktifkan.`,
+      });
+      setDeleting(null);
+      reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal menghapus item",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const items = React.useMemo(() => {
@@ -123,6 +175,8 @@ export default function MasterItemPage() {
   }, [catalog, query, section, sort]);
 
   const isFiltered = query.trim() !== "" || section !== "all";
+
+  if (!isAdmin) return null;
 
   return (
     <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -149,7 +203,9 @@ export default function MasterItemPage() {
           <div className="space-y-1">
             <CardTitle>Daftar Item</CardTitle>
             <CardDescription>
-              {items.length} dari {catalog.length} item
+              {loading
+                ? "Memuat…"
+                : `${items.length} dari ${catalog.length} item`}
             </CardDescription>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -188,41 +244,49 @@ export default function MasterItemPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <MasterItemTable
-            items={items}
-            sort={sort}
-            onSort={handleSort}
-            renderActions={(item) => (
-              <div className="flex items-center justify-end gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditing(item)}
-                >
-                  <Pencil className="size-4" />
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Hapus ${item.itemCode}`}
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => setDeleting(item)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            )}
-          />
+          {error ? (
+            <div className="p-6 text-sm text-destructive">
+              {error}{" "}
+              <button
+                type="button"
+                onClick={reload}
+                className="underline underline-offset-2"
+              >
+                Coba lagi
+              </button>
+            </div>
+          ) : (
+            <MasterItemTable
+              items={items}
+              sort={sort}
+              onSort={handleSort}
+              renderActions={(item) => (
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(item)}
+                  >
+                    <Pencil className="size-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Hapus ${item.itemCode}`}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setDeleting(item)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              )}
+            />
+          )}
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock) — tambah, edit, dan hapus
-        tersimpan di sesi browser saja hingga backend tersambung.
-      </p>
 
       <Dialog
         open={addOpen}
@@ -232,7 +296,7 @@ export default function MasterItemPage() {
       >
         <ItemForm
           existingCodes={catalog.map((i) => i.itemCode)}
-          submitLabel="Tambah"
+          submitLabel={busy ? "Menyimpan…" : "Tambah"}
           onSubmit={handleAdd}
           onCancel={() => setAddOpen(false)}
         />
@@ -251,7 +315,7 @@ export default function MasterItemPage() {
             existingCodes={catalog.map((i) => i.itemCode)}
             ownCode={editing.itemCode}
             initial={itemToFormValues(editing)}
-            submitLabel="Simpan Perubahan"
+            submitLabel={busy ? "Menyimpan…" : "Simpan Perubahan"}
             onSubmit={handleEdit}
             onCancel={() => setEditing(null)}
           />
@@ -270,7 +334,8 @@ export default function MasterItemPage() {
               <span className="font-medium text-foreground">
                 {deleting.itemCode} — {deleting.description}
               </span>
-              ? Tindakan ini tidak dapat dibatalkan.
+              ? Item dengan riwayat stok akan dinonaktifkan, bukan dihapus
+              permanen.
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -283,10 +348,11 @@ export default function MasterItemPage() {
               <Button
                 type="button"
                 variant="destructive"
+                disabled={busy}
                 onClick={handleDelete}
               >
                 <Trash2 className="size-4" />
-                Hapus
+                {busy ? "Menghapus…" : "Hapus"}
               </Button>
             </div>
           </div>

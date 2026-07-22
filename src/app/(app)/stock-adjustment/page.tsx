@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,7 +15,6 @@ import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
-import { Search, X } from "lucide-react";
 import {
   AdjustmentHistoryTable,
   type AdjustmentSort,
@@ -26,31 +25,38 @@ import {
   type AdjustmentFormValues,
 } from "@/components/adjustment-form";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
+import { useSession } from "@/components/session-provider";
+import { useAsync } from "@/hooks/use-async";
+import { apiGet, apiSend, ApiError } from "@/lib/api/client";
+import {
+  toMasterItem,
+  type ApiAdjustment,
+  type ApiMasterItem,
+} from "@/lib/api/types";
 import {
   ADJUSTMENT_REASONS,
-  MOCK_ADJUSTMENTS,
   adjustmentDifference,
+  type AdjustmentReason,
   type StockAdjustment,
 } from "@/lib/adjustment-mock";
-import {
-  MOCK_MASTER_ITEMS,
-  MOCK_SITES,
-  mockDailyStockRow,
-} from "@/lib/mock-data";
-import { computeBalance } from "@/lib/types";
-import { todayISODate } from "@/lib/date";
 
-/**
- * Stock Adjustment / opname (Admin only). Records a corrected physical count and
- * reason; the history keeps before/after values for audit. Mock data for now.
- */
+/** Stock Adjustment (Admin), backed by /api/adjustments and /api/master-items. */
 export default function StockAdjustmentPage() {
   const isAdmin = useRequireAdmin();
+  const { sites } = useSession();
   const { toast } = useToast();
 
-  const [adjustments, setAdjustments] =
-    React.useState<StockAdjustment[]>(MOCK_ADJUSTMENTS);
+  const adjReq = useAsync(
+    () => apiGet<{ adjustments: ApiAdjustment[] }>("/api/adjustments"),
+    [],
+  );
+  const itemsReq = useAsync(
+    () => apiGet<{ items: ApiMasterItem[] }>("/api/master-items"),
+    [],
+  );
+
   const [formOpen, setFormOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [siteFilter, setSiteFilter] = React.useState("all");
   const [reasonFilter, setReasonFilter] = React.useState("all");
   const [query, setQuery] = React.useState("");
@@ -58,62 +64,53 @@ export default function StockAdjustmentPage() {
     key: "date",
     dir: "desc",
   });
-  // Local applied-stock overrides so an adjustment takes effect immediately:
-  // once saved, the current stock for that (site, item) reflects the new value.
-  const [applied, setApplied] = React.useState<Record<string, number>>({});
 
-  const stockKey = (siteId: string, itemId: string) => `${siteId}:${itemId}`;
-
-  // Current stock = last applied value if any, else today's mock balance.
-  const getCurrentStock = React.useCallback(
-    (siteId: string, itemId: string) => {
-      const key = stockKey(siteId, itemId);
-      if (key in applied) return applied[key];
-      return computeBalance(mockDailyStockRow(itemId, siteId, todayISODate()));
-    },
-    [applied],
+  const items = React.useMemo(
+    () => (itemsReq.data?.items ?? []).map(toMasterItem),
+    [itemsReq.data],
   );
 
-  const handleCreate = (values: AdjustmentFormValues) => {
-    const site = MOCK_SITES.find((s) => s.id === values.siteId);
-    const item = MOCK_MASTER_ITEMS.find((i) => i.id === values.itemId);
-    if (!site || !item) return;
+  const allAdjustments: StockAdjustment[] = React.useMemo(
+    () =>
+      (adjReq.data?.adjustments ?? []).map((a) => ({
+        ...a,
+        reason: a.reason as AdjustmentReason,
+      })),
+    [adjReq.data],
+  );
 
-    const before = getCurrentStock(values.siteId, values.itemId);
-    const adjustment: StockAdjustment = {
-      id: `adj-${Date.now()}`,
-      date: todayISODate(),
-      site: site.name,
-      itemCode: item.itemCode,
-      itemDescription: item.description,
-      before,
-      after: values.physicalCount,
-      reason: values.reason,
-      note: values.note,
-      adjustedBy: "Admin Pusat",
-    };
-    setAdjustments((prev) => [adjustment, ...prev]);
-    // Apply immediately: the current stock for this (site, item) now reflects
-    // the counted physical value, so reopening the form shows the new "before".
-    setApplied((prev) => ({
-      ...prev,
-      [stockKey(values.siteId, values.itemId)]: values.physicalCount,
-    }));
-    setFormOpen(false);
-
-    const diff = adjustment.after - adjustment.before;
-    toast({
-      variant: "success",
-      title: "Penyesuaian tersimpan",
-      description: `${item.itemCode} di ${site.name}: ${before} → ${values.physicalCount} (${diff > 0 ? `+${diff}` : diff}).`,
-    });
+  const handleCreate = async (values: AdjustmentFormValues) => {
+    setSaving(true);
+    try {
+      const res = await apiSend<{ before: number; after: number }>(
+        "POST",
+        "/api/adjustments",
+        {
+          siteId: values.siteId,
+          itemId: values.itemId,
+          physicalCount: values.physicalCount,
+          reason: values.reason,
+          note: values.note,
+        },
+      );
+      const diff = res.after - res.before;
+      toast({
+        variant: "success",
+        title: "Penyesuaian tersimpan",
+        description: `Stok: ${res.before} → ${res.after} (${diff > 0 ? `+${diff}` : diff}).`,
+      });
+      setFormOpen(false);
+      adjReq.reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal menyimpan penyesuaian",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
-
-  // Distinct sites present in the history, for the site filter.
-  const siteOptions = React.useMemo(() => {
-    const set = new Set(adjustments.map((a) => a.site));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "id"));
-  }, [adjustments]);
 
   const handleSort = (key: AdjustmentSortKey) => {
     setSort((prev) =>
@@ -123,9 +120,14 @@ export default function StockAdjustmentPage() {
     );
   };
 
+  const siteOptions = React.useMemo(() => {
+    const set = new Set(allAdjustments.map((a) => a.site));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "id"));
+  }, [allAdjustments]);
+
   const sorted = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return [...adjustments]
+    return [...allAdjustments]
       .filter((a) => {
         if (siteFilter !== "all" && a.site !== siteFilter) return false;
         if (reasonFilter !== "all" && a.reason !== reasonFilter) return false;
@@ -145,25 +147,10 @@ export default function StockAdjustmentPage() {
             : a.date.localeCompare(b.date);
         return sort.dir === "asc" ? cmp : -cmp;
       });
-  }, [adjustments, siteFilter, reasonFilter, query, sort]);
+  }, [allAdjustments, siteFilter, reasonFilter, query, sort]);
 
   const hasFilter =
     siteFilter !== "all" || reasonFilter !== "all" || query.trim() !== "";
-
-  // Applied stock changes, resolved to readable site/item labels for display.
-  const appliedRows = React.useMemo(() => {
-    return Object.entries(applied).map(([key, value]) => {
-      const [siteId, itemId] = key.split(":");
-      const site = MOCK_SITES.find((s) => s.id === siteId);
-      const item = MOCK_MASTER_ITEMS.find((i) => i.id === itemId);
-      return {
-        key,
-        siteName: site?.name ?? siteId,
-        itemLabel: item ? `${item.itemCode} — ${item.description}` : itemId,
-        current: value,
-      };
-    });
-  }, [applied]);
 
   if (!isAdmin) return null;
 
@@ -187,40 +174,14 @@ export default function StockAdjustmentPage() {
         </Button>
       </header>
 
-      {appliedRows.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Stok Terkini Setelah Penyesuaian
-            </CardTitle>
-            <CardDescription>
-              Perubahan diterapkan langsung (state lokal).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {appliedRows.map((r) => (
-              <div
-                key={r.key}
-                className="rounded-lg border bg-emerald-500/5 px-3 py-2 text-sm"
-              >
-                <div className="text-xs text-muted-foreground">
-                  {r.siteName} · {r.itemLabel}
-                </div>
-                <div className="font-semibold tabular-nums">
-                  Stok terkini: {r.current}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader className="flex flex-col gap-4 border-b pb-4">
           <div className="space-y-1">
             <CardTitle>Riwayat Penyesuaian</CardTitle>
             <CardDescription>
-              {sorted.length} dari {adjustments.length} penyesuaian
+              {adjReq.loading
+                ? "Memuat…"
+                : `${sorted.length} dari ${allAdjustments.length} penyesuaian`}
             </CardDescription>
           </div>
           <div className="flex flex-col flex-wrap gap-3 sm:flex-row sm:items-end">
@@ -278,18 +239,26 @@ export default function StockAdjustmentPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <AdjustmentHistoryTable
-            adjustments={sorted}
-            sort={sort}
-            onSort={handleSort}
-          />
+          {adjReq.error ? (
+            <div className="p-6 text-sm text-destructive">
+              {adjReq.error}{" "}
+              <button
+                type="button"
+                onClick={adjReq.reload}
+                className="underline underline-offset-2"
+              >
+                Coba lagi
+              </button>
+            </div>
+          ) : (
+            <AdjustmentHistoryTable
+              adjustments={sorted}
+              sort={sort}
+              onSort={handleSort}
+            />
+          )}
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock) — penyesuaian baru tersimpan di
-        sesi browser saja hingga backend tersambung.
-      </p>
 
       <Dialog
         open={formOpen}
@@ -298,10 +267,9 @@ export default function StockAdjustmentPage() {
         description="Catat jumlah fisik hasil opname dan alasan penyesuaian."
       >
         <AdjustmentForm
-          sites={MOCK_SITES}
-          items={MOCK_MASTER_ITEMS}
-          getCurrentStock={getCurrentStock}
-          submitLabel="Simpan Penyesuaian"
+          sites={sites}
+          items={items}
+          submitLabel={saving ? "Menyimpan…" : "Simpan Penyesuaian"}
           onSubmit={handleCreate}
           onCancel={() => setFormOpen(false)}
         />

@@ -28,8 +28,12 @@ export type AdjustmentFormErrors = Partial<
 interface AdjustmentFormProps {
   sites: Site[];
   items: MasterItem[];
-  /** Resolves the current system stock (before) for an item at a site. */
-  getCurrentStock: (siteId: string, itemId: string) => number;
+  /**
+   * Resolves the current system stock (before) for an item at a site. When
+   * omitted (e.g. the value is only known server-side), the before/after preview
+   * and the no-op guard are skipped and the server validates instead.
+   */
+  getCurrentStock?: (siteId: string, itemId: string) => number;
   submitLabel?: string;
   onSubmit: (values: AdjustmentFormValues) => void;
   onCancel: () => void;
@@ -59,7 +63,9 @@ export function AdjustmentForm({
     setErrors((prev) => ({ ...prev, [key]: undefined }));
 
   const before =
-    siteId && itemId ? getCurrentStock(siteId, itemId) : null;
+    getCurrentStock && siteId && itemId
+      ? getCurrentStock(siteId, itemId)
+      : null;
   const after = physical.trim() === "" ? null : Number(physical);
   const diff = before !== null && after !== null ? after - before : null;
 
@@ -72,7 +78,7 @@ export function AdjustmentForm({
       next.physicalCount = "Jumlah fisik harus berupa angka.";
     } else if (!Number.isInteger(Number(physical)) || Number(physical) < 0) {
       next.physicalCount = "Jumlah fisik harus bilangan bulat ≥ 0.";
-    } else if (diff === 0) {
+    } else if (before !== null && diff === 0) {
       next.physicalCount = "Tidak ada selisih untuk disesuaikan.";
     }
     if (!reason) next.reason = "Alasan wajib dipilih.";

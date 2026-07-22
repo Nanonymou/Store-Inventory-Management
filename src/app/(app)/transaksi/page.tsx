@@ -3,10 +3,10 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { Lock, MapPin, PackageSearch, ShieldCheck, User, Wallet } from "lucide-react";
+import { Lock, MapPin, PackageSearch, Save, Wallet } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { DailyTransactionTable } from "@/components/daily-transaction-table";
 import {
   Card,
@@ -15,66 +15,56 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useSession } from "@/components/session-provider";
+import { useAsync } from "@/hooks/use-async";
+import { apiGet, apiSend, ApiError } from "@/lib/api/client";
+import { splitStockView, type ApiStockViewRow } from "@/lib/api/types";
 import {
-  MOCK_MASTER_ITEMS,
-  MOCK_SITES,
-  mockDailyStockForSite,
-} from "@/lib/mock-data";
-import { MOCK_ADMIN, MOCK_STOREMAN } from "@/lib/mock-session";
-import {
+  MOVEMENT_COLUMNS,
   computeBalance,
   type DailyStockMovements,
   type DailyStockRow,
-  type SessionUser,
 } from "@/lib/types";
-import { cn, formatRupiah } from "@/lib/utils";
+import { toISODate, todayISODate } from "@/lib/date";
+import { formatRupiah } from "@/lib/utils";
 
-/** Convert a Date to a local ISO date string (YYYY-MM-DD). */
-function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/**
- * Daily transaction page (mock data). Enforces the date-lock and role rules on
- * the UI:
- *   - Storeman: pinned to their bound site, may only edit today (past dates are
- *     viewable but read-only), no site switcher.
- *   - Admin: may switch across all 11 sites and edit any non-future date.
- * A demo role switcher lets you preview both experiences before real auth lands.
- */
+/** Daily transaction page, backed by /api/transactions and /api/daily-stock. */
 export default function DailyTransactionPage() {
-  const [user, setUser] = React.useState<SessionUser>(MOCK_STOREMAN);
-  const isAdmin = user.role === "admin";
-
-  // Selected site: Admin chooses; Storeman is fixed to their bound site.
-  const [adminSiteId, setAdminSiteId] = React.useState<string>(MOCK_SITES[0].id);
-  const activeSiteId = isAdmin ? adminSiteId : (user.siteId ?? MOCK_SITES[0].id);
-  const activeSite =
-    MOCK_SITES.find((s) => s.id === activeSiteId) ?? MOCK_SITES[0];
+  const { activeSite, activeSiteId, isAdmin } = useSession();
+  const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = React.useState<Date>(() => new Date());
   const [showValue, setShowValue] = React.useState(false);
   const [rows, setRows] = React.useState<DailyStockRow[]>([]);
+  const [saving, setSaving] = React.useState(false);
 
   const isoDate = toISODate(selectedDate);
-  const isToday = isoDate === toISODate(new Date());
+  const isToday = isoDate === todayISODate();
 
-  // When switching to a Storeman, snap the calendar back to today (they cannot
-  // linger in an editable past view).
+  const { data, loading, error, reload } = useAsync(
+    () =>
+      apiGet<{ rows: ApiStockViewRow[]; editable: boolean }>(
+        "/api/transactions",
+        { siteId: activeSiteId, date: isoDate },
+      ),
+    [activeSiteId, isoDate],
+  );
+
+  const { items } = React.useMemo(
+    () => splitStockView(data?.rows ?? [], activeSiteId, isoDate),
+    [data, activeSiteId, isoDate],
+  );
+
+  // Load the fetched rows into editable local state whenever they change.
   React.useEffect(() => {
-    if (!isAdmin) setSelectedDate(new Date());
-  }, [isAdmin]);
+    if (data) {
+      const split = splitStockView(data.rows, activeSiteId, isoDate);
+      setRows(split.rows);
+    }
+  }, [data, activeSiteId, isoDate]);
 
-  // (Re)load the day's rows from mock whenever the date or site changes.
-  React.useEffect(() => {
-    setRows(mockDailyStockForSite(activeSiteId, isoDate));
-  }, [activeSiteId, isoDate]);
-
-  // Editable when: Admin (any non-future date) or Storeman on today only.
-  const editable = (isAdmin || isToday) && !showValue;
+  const apiEditable = data?.editable ?? false;
+  const editable = apiEditable && !showValue;
 
   const handleCellChange = React.useCallback(
     (itemId: string, key: keyof DailyStockMovements, value: number) => {
@@ -85,14 +75,43 @@ export default function DailyTransactionPage() {
     [],
   );
 
-  // Live grand total of stock value (Balance × Price) across all items.
   const totalStockValue = React.useMemo(() => {
-    const priceByItem = new Map(MOCK_MASTER_ITEMS.map((i) => [i.id, i.price]));
+    const priceByItem = new Map(items.map((i) => [i.id, i.price]));
     return rows.reduce(
       (sum, r) => sum + computeBalance(r) * (priceByItem.get(r.itemId) ?? 0),
       0,
     );
-  }, [rows]);
+  }, [items, rows]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const entries = rows.map((r) => {
+        const movements = {} as DailyStockMovements;
+        for (const col of MOVEMENT_COLUMNS) movements[col.key] = r[col.key];
+        return { itemId: r.itemId, ...movements };
+      });
+      const res = await apiSend<{ created: number; revised: number }>(
+        "POST",
+        "/api/daily-stock",
+        { siteId: activeSiteId, date: isoDate, entries },
+      );
+      toast({
+        variant: "success",
+        title: "Transaksi tersimpan",
+        description: `${res.created} entri baru, ${res.revised} revisi.`,
+      });
+      reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal menyimpan",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <main className="mx-auto flex max-w-[1400px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -105,38 +124,18 @@ export default function DailyTransactionPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             Catat Transaksi Harian
           </h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="size-4" />
-              {activeSite.name}
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="size-4" />
+            {activeSite?.name ?? "—"}
+            {activeSite && (
               <span className="text-muted-foreground/60">
                 · {activeSite.location}
               </span>
-            </span>
-            <RoleBadge role={user.role} name={user.name} />
-          </div>
+            )}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-end gap-4">
-          {/* Site switcher — Admin only. */}
-          {isAdmin && (
-            <div className="flex flex-col items-start gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Pilih Site
-              </span>
-              <Select
-                value={adminSiteId}
-                onValueChange={setAdminSiteId}
-                options={MOCK_SITES.map((s) => ({
-                  value: s.id,
-                  label: `${s.name} — ${s.location}`,
-                }))}
-                className="w-[240px]"
-              />
-            </div>
-          )}
-
-          {/* Date picker — future locked; Storeman is pinned to today. */}
           <div className="flex flex-col items-start gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">
               Tanggal rekap
@@ -145,38 +144,17 @@ export default function DailyTransactionPage() {
               value={selectedDate}
               onChange={setSelectedDate}
               disableFuture
-              disabled={!isAdmin}
             />
             {editable ? (
-              <span className="text-xs text-emerald-600">
-                Mode input aktif.
-              </span>
+              <span className="text-xs text-emerald-600">Mode input aktif.</span>
             ) : (
               <span className="flex items-center gap-1 text-xs text-amber-600">
                 <Lock className="size-3" />
-                {isAdmin
+                {isAdmin || isToday
                   ? "Mode lihat."
-                  : "Storeman terkunci pada hari ini · tanggal lampau hanya bisa dilihat."}
+                  : "Tanggal lampau — hanya bisa dilihat."}
               </span>
             )}
-          </div>
-
-          {/* Demo role switcher (temporary until real auth). */}
-          <div className="flex flex-col items-start gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Mode (demo)
-            </span>
-            <Select
-              value={user.role}
-              onValueChange={(v) =>
-                setUser(v === "admin" ? MOCK_ADMIN : MOCK_STOREMAN)
-              }
-              options={[
-                { value: "storeman", label: "Storeman" },
-                { value: "admin", label: "Admin" },
-              ]}
-              className="w-[140px]"
-            />
           </div>
         </div>
       </header>
@@ -187,7 +165,8 @@ export default function DailyTransactionPage() {
             <CardTitle>Rekap Stok</CardTitle>
             <CardDescription>
               {format(selectedDate, "EEEE, dd MMMM yyyy", { locale: localeId })}{" "}
-              · {MOCK_MASTER_ITEMS.length} item · Balance dihitung otomatis
+              · {loading ? "memuat…" : `${items.length} item`} · Balance
+              dihitung otomatis
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -200,26 +179,49 @@ export default function DailyTransactionPage() {
               <Wallet className="size-4" />
               {showValue ? "Tampilkan Qty" : "Tampilkan Nilai (Rp)"}
             </Button>
+            {apiEditable && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={saving}
+                onClick={handleSave}
+              >
+                <Save className="size-4" />
+                {saving ? "Menyimpan…" : "Simpan"}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <DailyTransactionTable
-            items={MOCK_MASTER_ITEMS}
-            rows={rows}
-            editable={editable}
-            showValue={showValue}
-            onCellChange={handleCellChange}
-          />
+          {error ? (
+            <div className="p-6 text-sm text-destructive">
+              {error}{" "}
+              <button
+                type="button"
+                onClick={reload}
+                className="underline underline-offset-2"
+              >
+                Coba lagi
+              </button>
+            </div>
+          ) : (
+            <DailyTransactionTable
+              items={items}
+              rows={rows}
+              editable={editable}
+              showValue={showValue}
+              onCellChange={handleCellChange}
+            />
+          )}
         </CardContent>
       </Card>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-xs text-muted-foreground">
-          Data pada halaman ini masih tiruan (mock) untuk pengembangan
-          antarmuka. Beginning Balance terisi otomatis dari Balance hari
-          sebelumnya. Balance = Beginning Balance + Receiving − Regular − Snack −
-          Backcharge − HKL − Event − Ent − TO − Spoil. Nilai Rupiah dihitung
-          otomatis dari Price × Qty tiap kolom.
+          Beginning Balance terisi otomatis dari Balance hari sebelumnya. Balance
+          = Beginning Balance + Receiving − Regular − Snack − Backcharge − HKL −
+          Event − Ent − TO − Spoil. Nilai Rupiah dihitung dari Price × Qty tiap
+          kolom.
         </p>
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-right">
           <div className="text-xs text-muted-foreground">
@@ -231,27 +233,5 @@ export default function DailyTransactionPage() {
         </div>
       </div>
     </main>
-  );
-}
-
-/** Small role indicator chip in the page header. */
-function RoleBadge({ role, name }: { role: SessionUser["role"]; name: string }) {
-  const isAdmin = role === "admin";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isAdmin
-          ? "bg-primary/10 text-primary"
-          : "bg-emerald-500/10 text-emerald-700",
-      )}
-    >
-      {isAdmin ? (
-        <ShieldCheck className="size-3" />
-      ) : (
-        <User className="size-3" />
-      )}
-      {name}
-    </span>
   );
 }

@@ -6,14 +6,32 @@ import { LogIn, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authenticateMock, MOCK_CREDENTIALS } from "@/lib/mock-session";
-import { setClientSession } from "@/lib/auth/client-session";
+import { apiSend, ApiError } from "@/lib/api/client";
+import type { SessionUser } from "@/lib/types";
+
+/** Demo accounts created by the seed script (npm run db:seed). */
+const DEMO_ACCOUNTS = [
+  { email: "admin@stokman.test", password: "admin123" },
+  { email: "storeman.a@stokman.test", password: "storeman123" },
+];
+
+const ADMIN_PREFIXES = [
+  "/master-item",
+  "/users",
+  "/stock-transfer",
+  "/stock-adjustment",
+  "/audit-log",
+  "/admin",
+];
+
+function isAdminPath(path: string): boolean {
+  return ADMIN_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+}
 
 /**
- * Login page (mock authentication). Validates the demo credentials, writes the
- * session cookie, and routes the user to their landing page (Admin → dashboard,
- * Storeman → daily transaction). Real authentication replaces authenticateMock
- * with the Login backend later; the cookie seam stays the same.
+ * Login page. Authenticates against POST /api/auth/login (which sets an httpOnly
+ * session cookie), then routes the user to their landing page (Admin → dashboard,
+ * Storeman → daily transaction), honoring a safe `next` target.
  */
 function LoginForm() {
   const router = useRouter();
@@ -26,30 +44,33 @@ function LoginForm() {
 
   const idle = params.get("reason") === "idle";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-
-    const user = authenticateMock(email, password);
-    if (!user) {
-      setError("Email atau password salah.");
+    try {
+      const { user } = await apiSend<{ user: SessionUser }>(
+        "POST",
+        "/api/auth/login",
+        { email, password },
+      );
+      const next = params.get("next");
+      const fallback = user.role === "admin" ? "/dashboard" : "/transaksi";
+      const target =
+        next && (user.role === "admin" || !isAdminPath(next)) ? next : fallback;
+      router.replace(target);
+      router.refresh();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Gagal masuk. Coba lagi.",
+      );
       setSubmitting(false);
-      return;
     }
-
-    setClientSession(user);
-    const next = params.get("next");
-    const fallback = user.role === "admin" ? "/dashboard" : "/transaksi";
-    // Never bounce a Storeman into an admin-only next target.
-    const target =
-      next && (user.role === "admin" || !isAdminPath(next)) ? next : fallback;
-    router.replace(target);
   };
 
-  const fillDemo = (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
+  const fillDemo = (demoEmail: string, demoPassword: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
     setError(null);
   };
 
@@ -108,14 +129,14 @@ function LoginForm() {
 
         <Button type="submit" className="w-full" disabled={submitting}>
           <LogIn className="size-4" />
-          Masuk
+          {submitting ? "Memproses…" : "Masuk"}
         </Button>
       </form>
 
       <div className="mt-4 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-        <p className="mb-2 font-medium">Akun demo (mock):</p>
+        <p className="mb-2 font-medium">Akun demo (setelah seed):</p>
         <ul className="space-y-1">
-          {MOCK_CREDENTIALS.map((c) => (
+          {DEMO_ACCOUNTS.map((c) => (
             <li key={c.email} className="flex items-center justify-between gap-2">
               <span>
                 {c.email} · <span className="font-mono">{c.password}</span>
@@ -133,19 +154,6 @@ function LoginForm() {
       </div>
     </div>
   );
-}
-
-const ADMIN_PREFIXES = [
-  "/master-item",
-  "/users",
-  "/stock-transfer",
-  "/stock-adjustment",
-  "/audit-log",
-  "/admin",
-];
-
-function isAdminPath(path: string): boolean {
-  return ADMIN_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
 export default function LoginPage() {

@@ -15,14 +15,13 @@ import {
   EMPTY_AUDIT_FILTERS,
   type AuditFilterState,
 } from "@/components/audit-log-filters";
-import { MOCK_AUDIT_LOGS } from "@/lib/audit-mock";
 import { useAuditLogs } from "@/hooks/use-audit-logs";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
 
 /**
  * Audit Log (Admin only). Integrates the user, action-type, and date-range
- * filters over the activity trail (mock data); all filters compose and update
- * the table live.
+ * filters over the activity trail from /api/audit-logs; all filters compose and
+ * update the table live.
  */
 export default function AuditLogPage() {
   // Audit Log is Admin-only; withhold content from non-Admins (they are
@@ -32,21 +31,29 @@ export default function AuditLogPage() {
   const [filters, setFilters] =
     React.useState<AuditFilterState>(EMPTY_AUDIT_FILTERS);
 
-  // Filter-option sources derived from the log.
-  const users = React.useMemo(() => {
-    const names = new Set(MOCK_AUDIT_LOGS.map((l) => l.userName));
-    return Array.from(names).sort((a, b) => a.localeCompare(b, "id"));
-  }, []);
-
-  const actions = React.useMemo(() => {
-    const keys = new Set(MOCK_AUDIT_LOGS.map((l) => l.action));
-    return Array.from(keys)
-      .map((key) => ({ value: key, label: actionMeta(key).label }))
-      .sort((a, b) => a.label.localeCompare(b.label, "id"));
-  }, []);
-
-  // Fetch from the backend (falls back to filtered mock until the API exists).
+  // Fetch from the backend (falls back to filtered mock if unreachable).
   const { entries, isLoading, usingMock } = useAuditLogs(filters);
+
+  // Filter options derived from the loaded entries. A ref keeps the widest set
+  // seen so far so options don't disappear once a filter narrows the results.
+  const seenUsers = React.useRef<Set<string>>(new Set());
+  const seenActions = React.useRef<Set<string>>(new Set());
+  for (const e of entries) {
+    seenUsers.current.add(e.userName);
+    seenActions.current.add(e.action);
+  }
+
+  const users = React.useMemo(
+    () => Array.from(seenUsers.current).sort((a, b) => a.localeCompare(b, "id")),
+    [entries],
+  );
+  const actions = React.useMemo(
+    () =>
+      Array.from(seenActions.current)
+        .map((key) => ({ value: key, label: actionMeta(key).label }))
+        .sort((a, b) => a.label.localeCompare(b.label, "id")),
+    [entries],
+  );
 
   // All hooks are called above; safe to withhold render for non-Admins.
   if (!isAdmin) return null;
@@ -87,10 +94,11 @@ export default function AuditLogPage() {
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock). Pencarian kata kunci akan
-        ditambahkan pada langkah berikutnya.
-      </p>
+      {usingMock && (
+        <p className="text-xs text-muted-foreground">
+          Backend tidak terjangkau — menampilkan data tiruan sebagai cadangan.
+        </p>
+      )}
     </main>
   );
 }

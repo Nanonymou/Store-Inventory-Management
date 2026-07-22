@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { MOCK_SITES } from "@/lib/mock-data";
-import { clearClientSession, readClientSession } from "@/lib/auth/client-session";
+import { apiGet, apiSend } from "@/lib/api/client";
 import type { SessionUser, Site } from "@/lib/types";
 
 interface SessionContextValue {
@@ -13,7 +12,7 @@ interface SessionContextValue {
   /** Currently selected site id (Admin can change it; Storeman is fixed). */
   activeSiteId: string;
   setActiveSiteId: (siteId: string) => void;
-  activeSite: Site;
+  activeSite: Site | null;
   isAdmin: boolean;
   logout: (reason?: "idle") => void;
 }
@@ -33,72 +32,84 @@ function readStoredSiteId(): string | null {
 }
 
 /**
- * Provides the authenticated session to the app pages. Reads the session cookie
- * on mount and redirects to /login when absent. Exposes the active site — the
- * single source of truth for the shell's site picker and the pages that read it
- * (Admin can switch across the 11 mock sites; a Storeman is pinned to theirs).
+ * Provides the authenticated session to the app pages. Resolves the session and
+ * the accessible sites from the API on mount, redirecting to /login when there
+ * is no valid session. Exposes the active site — the single source of truth for
+ * the shell's site picker and the pages that read it (Admin can switch across
+ * the sites they can see; a Storeman is pinned to theirs).
  */
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = React.useState<SessionUser | null>(null);
+  const [sites, setSites] = React.useState<Site[]>([]);
   const [checked, setChecked] = React.useState(false);
   const [activeSiteId, setActiveSiteId] = React.useState<string>("");
 
   React.useEffect(() => {
-    const current = readClientSession();
-    if (!current) {
-      router.replace("/login");
-      return;
-    }
-    setUser(current);
-    if (current.role === "storeman" && current.siteId) {
-      setActiveSiteId(current.siteId);
-    } else {
-      // Admin: restore the previously chosen site (if still valid) so the
-      // selection survives reloads and new tabs, not just client navigation.
-      const stored = readStoredSiteId();
-      const valid = stored && MOCK_SITES.some((s) => s.id === stored);
-      setActiveSiteId(valid ? stored : MOCK_SITES[0].id);
-    }
-    setChecked(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ user: current }, { sites: siteList }] = await Promise.all([
+          apiGet<{ user: SessionUser }>("/api/auth/session"),
+          apiGet<{ sites: Site[] }>("/api/sites"),
+        ]);
+        if (cancelled) return;
+        setUser(current);
+        setSites(siteList);
+
+        if (current.role === "storeman") {
+          setActiveSiteId(current.siteId ?? siteList[0]?.id ?? "");
+        } else {
+          const stored = readStoredSiteId();
+          const valid = stored && siteList.some((s) => s.id === stored);
+          setActiveSiteId(valid ? stored : (siteList[0]?.id ?? ""));
+        }
+        setChecked(true);
+      } catch {
+        if (!cancelled) router.replace("/login");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  // Persist the Admin's active-site choice so it is remembered across sessions.
+  const logout = React.useCallback(
+    (reason?: "idle") => {
+      // Best-effort server logout, then leave regardless of the result.
+      apiSend("POST", "/api/auth/logout").catch(() => {});
+      try {
+        localStorage.removeItem(ACTIVE_SITE_KEY);
+      } catch {
+        /* ignore */
+      }
+      router.replace(reason === "idle" ? "/login?reason=idle" : "/login");
+    },
+    [router],
+  );
+
+  // Persist the Admin's active-site choice across sessions.
   React.useEffect(() => {
     if (!checked || !user || user.role !== "admin" || !activeSiteId) return;
     try {
       localStorage.setItem(ACTIVE_SITE_KEY, activeSiteId);
     } catch {
-      // Storage may be unavailable (private mode) — selection still works
-      // in-memory for the current navigation.
+      /* storage may be unavailable */
     }
   }, [checked, user, activeSiteId]);
 
-  const logout = React.useCallback(
-    (reason?: "idle") => {
-      clearClientSession();
-      const url = reason === "idle" ? "/login?reason=idle" : "/login";
-      router.replace(url);
-    },
-    [router],
-  );
-
-  // Auto-logout after 30 minutes of inactivity (PRD session security). Any user
-  // interaction resets the timer; on timeout the session is cleared.
+  // Auto-logout after 30 minutes of inactivity (PRD session security).
   React.useEffect(() => {
     if (!checked || !user) return;
     const IDLE_MS = 30 * 60 * 1000;
     let timer: ReturnType<typeof setTimeout>;
-
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => logout("idle"), IDLE_MS);
     };
-
     const events = ["mousedown", "keydown", "scroll", "touchstart"] as const;
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
     reset();
-
     return () => {
       clearTimeout(timer);
       events.forEach((e) => window.removeEventListener(e, reset));
@@ -114,14 +125,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   const isAdmin = user.role === "admin";
-  const sites = isAdmin
-    ? MOCK_SITES
-    : MOCK_SITES.filter((s) => s.id === user.siteId);
   const effectiveSiteId = isAdmin
     ? activeSiteId
-    : (user.siteId ?? MOCK_SITES[0].id);
-  const activeSite =
-    MOCK_SITES.find((s) => s.id === effectiveSiteId) ?? MOCK_SITES[0];
+    : (user.siteId ?? activeSiteId);
+  const activeSite = sites.find((s) => s.id === effectiveSiteId) ?? null;
 
   const value: SessionContextValue = {
     user,

@@ -19,17 +19,24 @@ import {
 } from "@/components/dashboard-filters";
 import { ExportButtons } from "@/components/export-buttons";
 import { useSession } from "@/components/session-provider";
-import { MOCK_MASTER_ITEMS, mockDailyStockForSite } from "@/lib/mock-data";
+import { useAsync } from "@/hooks/use-async";
+import { apiGet } from "@/lib/api/client";
+import { splitStockView, type ApiStockViewRow } from "@/lib/api/types";
 import { todayISODate } from "@/lib/date";
 
-/**
- * Dashboard Stok — central monitoring page (mock data). Site, section, and
- * keyword filters narrow both the stock table and the value summary in real
- * time.
- */
+/** Dashboard Stok — central monitoring page, backed by /api/dashboard/stock. */
 export default function DashboardPage() {
   const today = todayISODate();
   const { activeSite, activeSiteId, sites } = useSession();
+
+  const { data, loading, error, reload } = useAsync(
+    () =>
+      apiGet<{ rows: ApiStockViewRow[] }>("/api/dashboard/stock", {
+        siteId: activeSiteId,
+        date: today,
+      }),
+    [activeSiteId, today],
+  );
 
   const [filters, setFilters] = React.useState<DashboardFilterState>({
     siteId: activeSiteId,
@@ -37,23 +44,20 @@ export default function DashboardPage() {
     query: "",
   });
 
-  // Keep the filter's site in sync with the shell's active-site picker.
   React.useEffect(() => {
     setFilters((prev) =>
       prev.siteId === activeSiteId ? prev : { ...prev, siteId: activeSiteId },
     );
   }, [activeSiteId]);
 
-  // All rows for the selected site (mock).
-  const allRows = React.useMemo(
-    () => mockDailyStockForSite(activeSiteId, today),
-    [activeSiteId, today],
+  const { items: allItems, rows: allRows } = React.useMemo(
+    () => splitStockView(data?.rows ?? [], activeSiteId, today),
+    [data, activeSiteId, today],
   );
 
-  // Apply section + keyword filters to the item catalog.
   const filteredItems = React.useMemo(() => {
     const q = filters.query.trim().toLowerCase();
-    return MOCK_MASTER_ITEMS.filter((item) => {
+    return allItems.filter((item) => {
       if (filters.section !== "all" && item.section !== filters.section) {
         return false;
       }
@@ -64,7 +68,7 @@ export default function DashboardPage() {
         (item.brand ?? "").toLowerCase().includes(q)
       );
     });
-  }, [filters.section, filters.query]);
+  }, [allItems, filters.section, filters.query]);
 
   const filteredRows = React.useMemo(() => {
     const ids = new Set(filteredItems.map((i) => i.id));
@@ -80,12 +84,11 @@ export default function DashboardPage() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard Stok</h1>
         <p className="text-sm text-muted-foreground">
-          Pantau seluruh persediaan per site ·{" "}
+          {activeSite ? `${activeSite.name} · ` : ""}
           {format(new Date(), "EEEE, dd MMMM yyyy", { locale: localeId })}
         </p>
       </header>
 
-      {/* Filters & search. */}
       <DashboardFilters
         sites={sites}
         value={filters}
@@ -95,33 +98,47 @@ export default function DashboardPage() {
           <ExportButtons
             items={filteredItems}
             rows={filteredRows}
-            meta={{ siteName: activeSite.name, date: today }}
+            meta={{ siteName: activeSite?.name ?? "Site", date: today }}
           />
         }
       />
 
-      {/* Value summary. */}
-      <section aria-label="Ringkasan nilai" className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Wallet className="size-4" />
-          Ringkasan Nilai
+      {error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
+          {error}{" "}
+          <button
+            type="button"
+            onClick={reload}
+            className="underline underline-offset-2"
+          >
+            Coba lagi
+          </button>
         </div>
-        <ValueSummary items={filteredItems} rows={filteredRows} />
-      </section>
+      ) : (
+        <>
+          <section aria-label="Ringkasan nilai" className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Wallet className="size-4" />
+              Ringkasan Nilai
+            </div>
+            <ValueSummary items={filteredItems} rows={filteredRows} />
+          </section>
 
-      {/* Main stock table. */}
-      <Card>
-        <CardHeader className="border-b pb-4">
-          <CardTitle>Tabel Stok Lengkap</CardTitle>
-          <CardDescription>
-            {activeSite.name} · {filteredItems.length} dari{" "}
-            {MOCK_MASTER_ITEMS.length} item · saldo hari ini
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <StockDashboardTable items={filteredItems} rows={filteredRows} />
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader className="border-b pb-4">
+              <CardTitle>Tabel Stok Lengkap</CardTitle>
+              <CardDescription>
+                {loading
+                  ? "Memuat…"
+                  : `${activeSite?.name ?? "Site"} · ${filteredItems.length} dari ${allItems.length} item · saldo hari ini`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <StockDashboardTable items={filteredItems} rows={filteredRows} />
+            </CardContent>
+          </Card>
+        </>
+      )}
     </main>
   );
 }

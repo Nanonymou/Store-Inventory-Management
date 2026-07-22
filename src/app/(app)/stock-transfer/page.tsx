@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import {
   TransferHistoryTable,
   type TransferSort,
@@ -21,33 +22,35 @@ import {
   EMPTY_TRANSFER_FILTERS,
   type TransferFilterState,
 } from "@/components/transfer-filters";
-import {
-  TransferForm,
-  type TransferFormErrors,
-  type TransferFormValues,
-} from "@/components/transfer-form";
+import { TransferForm, type TransferFormValues } from "@/components/transfer-form";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
-import { MOCK_TRANSFERS, type StockTransfer } from "@/lib/transfer-mock";
+import { useSession } from "@/components/session-provider";
+import { useAsync } from "@/hooks/use-async";
+import { apiGet, apiSend, ApiError } from "@/lib/api/client";
 import {
-  MOCK_MASTER_ITEMS,
-  MOCK_SITES,
-  mockDailyStockRow,
-} from "@/lib/mock-data";
-import { computeBalance } from "@/lib/types";
-import { todayISODate } from "@/lib/date";
+  toMasterItem,
+  type ApiMasterItem,
+  type ApiTransfer,
+} from "@/lib/api/types";
+import type { StockTransfer, TransferStatus } from "@/lib/transfer-mock";
 
-/**
- * Stock Transfer (Admin only). Transfer history on mock data with status/site/
- * keyword filters and sorting; the transfer form and stock validation arrive in
- * the following steps.
- */
+/** Stock Transfer (Admin), backed by /api/transfers and /api/master-items. */
 export default function StockTransferPage() {
   const isAdmin = useRequireAdmin();
+  const { sites } = useSession();
+  const { toast } = useToast();
 
-  // Local transfer list (mock) so newly created transfers appear immediately.
-  const [allTransfers, setAllTransfers] =
-    React.useState<StockTransfer[]>(MOCK_TRANSFERS);
+  const transfersReq = useAsync(
+    () => apiGet<{ transfers: ApiTransfer[] }>("/api/transfers"),
+    [],
+  );
+  const itemsReq = useAsync(
+    () => apiGet<{ items: ApiMasterItem[] }>("/api/master-items"),
+    [],
+  );
+
   const [formOpen, setFormOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [filters, setFilters] = React.useState<TransferFilterState>(
     EMPTY_TRANSFER_FILTERS,
   );
@@ -56,46 +59,18 @@ export default function StockTransferPage() {
     dir: "desc",
   });
 
-  const handleCreate = (values: TransferFormValues) => {
-    const from = MOCK_SITES.find((s) => s.id === values.fromSiteId);
-    const to = MOCK_SITES.find((s) => s.id === values.toSiteId);
-    const item = MOCK_MASTER_ITEMS.find((i) => i.id === values.itemId);
-    if (!from || !to || !item) return;
-
-    const transfer: StockTransfer = {
-      id: `tf-${Date.now()}`,
-      date: todayISODate(),
-      itemCode: item.itemCode,
-      itemDescription: item.description,
-      fromSite: from.name,
-      toSite: to.name,
-      quantity: values.quantity,
-      status: "pending",
-      checkedBy: "—",
-    };
-    setAllTransfers((prev) => [transfer, ...prev]);
-    setFormOpen(false);
-  };
-
-  // Mock available stock: today's computed balance for the item at the site.
-  const getAvailableStock = React.useCallback(
-    (siteId: string, itemId: string) =>
-      computeBalance(mockDailyStockRow(itemId, siteId, todayISODate())),
-    [],
+  const allTransfers: StockTransfer[] = React.useMemo(
+    () =>
+      (transfersReq.data?.transfers ?? []).map((t) => ({
+        ...t,
+        status: t.status as TransferStatus,
+      })),
+    [transfersReq.data],
   );
 
-  // Stock validation: a transfer cannot exceed the origin's available stock.
-  const validateStock = React.useCallback(
-    (values: TransferFormValues): TransferFormErrors => {
-      const available = getAvailableStock(values.fromSiteId, values.itemId);
-      if (values.quantity > available) {
-        return {
-          quantity: `Stok tidak cukup. Tersedia ${available} unit di site asal.`,
-        };
-      }
-      return {};
-    },
-    [getAvailableStock],
+  const items = React.useMemo(
+    () => (itemsReq.data?.items ?? []).map(toMasterItem),
+    [itemsReq.data],
   );
 
   const handleSort = (key: TransferSortKey) => {
@@ -106,8 +81,30 @@ export default function StockTransferPage() {
     );
   };
 
-  // Distinct site names (origin or destination) for the site filter.
-  const sites = React.useMemo(() => {
+  const handleCreate = async (values: TransferFormValues) => {
+    setSaving(true);
+    try {
+      await apiSend("POST", "/api/transfers", {
+        fromSiteId: values.fromSiteId,
+        toSiteId: values.toSiteId,
+        itemId: values.itemId,
+        quantity: values.quantity,
+      });
+      toast({ variant: "success", title: "Transfer dibuat (menunggu persetujuan)." });
+      setFormOpen(false);
+      transfersReq.reload();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Gagal membuat transfer",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const siteNames = React.useMemo(() => {
     const set = new Set<string>();
     for (const t of allTransfers) {
       set.add(t.fromSite);
@@ -136,14 +133,13 @@ export default function StockTransferPage() {
       }
       return true;
     });
-    const sorted = [...filtered].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const cmp =
         sort.key === "quantity"
           ? a.quantity - b.quantity
           : a.date.localeCompare(b.date);
       return sort.dir === "asc" ? cmp : -cmp;
     });
-    return sorted;
   }, [allTransfers, filters, sort]);
 
   if (!isAdmin) return null;
@@ -173,31 +169,41 @@ export default function StockTransferPage() {
           <div className="space-y-1">
             <CardTitle>Riwayat Transfer</CardTitle>
             <CardDescription>
-              {transfers.length} dari {MOCK_TRANSFERS.length} mutasi
+              {transfersReq.loading
+                ? "Memuat…"
+                : `${transfers.length} dari ${allTransfers.length} mutasi`}
             </CardDescription>
           </div>
           <TransferFilters
             value={filters}
             onChange={setFilters}
-            sites={sites}
+            sites={siteNames}
             sort={sort}
             onSortChange={setSort}
           />
         </CardHeader>
         <CardContent className="p-0">
-          <TransferHistoryTable
-            transfers={transfers}
-            sort={sort}
-            onSort={handleSort}
-          />
+          {transfersReq.error ? (
+            <div className="p-6 text-sm text-destructive">
+              {transfersReq.error}{" "}
+              <button
+                type="button"
+                onClick={transfersReq.reload}
+                className="underline underline-offset-2"
+              >
+                Coba lagi
+              </button>
+            </div>
+          ) : (
+            <TransferHistoryTable
+              transfers={transfers}
+              sort={sort}
+              onSort={handleSort}
+              isLoading={transfersReq.loading}
+            />
+          )}
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock) — transfer baru tersimpan di
-        sesi browser saja hingga backend tersambung. Jumlah transfer divalidasi
-        terhadap stok yang tersedia di site asal.
-      </p>
 
       <Dialog
         open={formOpen}
@@ -206,13 +212,11 @@ export default function StockTransferPage() {
         description="Pindahkan stok dari satu site ke site lain."
       >
         <TransferForm
-          sites={MOCK_SITES}
-          items={MOCK_MASTER_ITEMS}
-          submitLabel="Buat Transfer"
+          sites={sites}
+          items={items}
+          submitLabel={saving ? "Menyimpan…" : "Buat Transfer"}
           onSubmit={handleCreate}
           onCancel={() => setFormOpen(false)}
-          getAvailableStock={getAvailableStock}
-          validateExtra={validateStock}
         />
       </Dialog>
     </main>
