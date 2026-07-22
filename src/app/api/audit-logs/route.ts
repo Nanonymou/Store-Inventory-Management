@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { AuthorizationError, requireAdmin } from "@/lib/auth/rbac";
-import { guardWithAudit } from "@/lib/auth/audit";
+import { AuthorizationError } from "@/lib/auth/rbac";
+import { requireAdminApi } from "@/lib/auth/api-guard";
 import { isValidISODate } from "@/lib/date";
 import { countAuditLogs, listAuditLogs } from "@/lib/audit/service";
 
@@ -16,11 +15,8 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    await guardWithAudit(() => requireAdmin(session), {
-      user: session,
-      resourceTarget: "audit_logs:list",
-    });
+    // Admin-only: the audit trail is security-sensitive.
+    await requireAdminApi("audit_logs:list");
 
     const { searchParams } = new URL(req.url);
     const from = searchParams.get("from") ?? undefined;
