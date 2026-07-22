@@ -24,7 +24,12 @@ import {
 import { TransferForm, type TransferFormValues } from "@/components/transfer-form";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
 import { MOCK_TRANSFERS, type StockTransfer } from "@/lib/transfer-mock";
-import { MOCK_MASTER_ITEMS, MOCK_SITES } from "@/lib/mock-data";
+import {
+  MOCK_MASTER_ITEMS,
+  MOCK_SITES,
+  mockDailyStockRow,
+} from "@/lib/mock-data";
+import { computeBalance } from "@/lib/types";
 import { todayISODate } from "@/lib/date";
 
 /**
@@ -67,6 +72,13 @@ export default function StockTransferPage() {
     setAllTransfers((prev) => [transfer, ...prev]);
     setFormOpen(false);
   };
+
+  // Mock available stock: today's computed balance for the item at the site.
+  const getAvailableStock = React.useCallback(
+    (siteId: string, itemId: string) =>
+      computeBalance(mockDailyStockRow(itemId, siteId, todayISODate())),
+    [],
+  );
 
   const handleSort = (key: TransferSortKey) => {
     setSort((prev) =>
@@ -181,6 +193,7 @@ export default function StockTransferPage() {
           submitLabel="Buat Transfer"
           onSubmit={handleCreate}
           onCancel={() => setFormOpen(false)}
+          getAvailableStock={getAvailableStock}
         />
       </Dialog>
     </main>

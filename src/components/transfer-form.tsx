@@ -30,6 +30,11 @@ interface TransferFormProps {
    * checks pass. Return errors to block submission.
    */
   validateExtra?: (values: TransferFormValues) => TransferFormErrors;
+  /**
+   * Optional resolver for the available stock of an item at a site. When
+   * provided, the form shows the origin's availability as the item is chosen.
+   */
+  getAvailableStock?: (siteId: string, itemId: string) => number;
 }
 
 /**
@@ -45,6 +50,7 @@ export function TransferForm({
   onSubmit,
   onCancel,
   validateExtra,
+  getAvailableStock,
 }: TransferFormProps) {
   const [fromSiteId, setFromSiteId] = React.useState("");
   const [toSiteId, setToSiteId] = React.useState("");
@@ -54,6 +60,16 @@ export function TransferForm({
 
   const clearError = (key: keyof TransferFormValues) =>
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+
+  const fromSite = sites.find((s) => s.id === fromSiteId);
+  const toSite = sites.find((s) => s.id === toSiteId);
+  const item = items.find((i) => i.id === itemId);
+
+  // Available stock at the origin for the chosen item (when a resolver is set).
+  const available =
+    getAvailableStock && fromSiteId && itemId
+      ? getAvailableStock(fromSiteId, itemId)
+      : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,10 +102,15 @@ export function TransferForm({
     onSubmit(values);
   };
 
-  const siteOptions = sites.map((s) => ({
+  const toOption = (s: Site) => ({
     value: s.id,
     label: `${s.name} — ${s.location}`,
-  }));
+  });
+  // Keep origin and destination mutually exclusive in the dropdowns.
+  const originOptions = sites.filter((s) => s.id !== toSiteId).map(toOption);
+  const destinationOptions = sites
+    .filter((s) => s.id !== fromSiteId)
+    .map(toOption);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -102,7 +123,7 @@ export function TransferForm({
               clearError("fromSiteId");
             }}
             placeholder="Pilih asal"
-            options={siteOptions}
+            options={originOptions}
             className="w-full"
           />
         </Field>
@@ -117,7 +138,7 @@ export function TransferForm({
               clearError("toSiteId");
             }}
             placeholder="Pilih tujuan"
-            options={siteOptions}
+            options={destinationOptions}
             className="w-full"
           />
         </Field>
@@ -139,6 +160,15 @@ export function TransferForm({
         />
       </Field>
 
+      {available !== null && (
+        <p className="text-xs text-muted-foreground">
+          Stok tersedia di{" "}
+          <span className="font-medium text-foreground">{fromSite?.name}</span>{" "}
+          untuk item ini:{" "}
+          <span className="font-semibold text-foreground">{available}</span>
+        </p>
+      )}
+
       <Field label="Jumlah (Qty)" error={errors.quantity} required>
         <Input
           type="number"
@@ -152,6 +182,22 @@ export function TransferForm({
           placeholder="0"
         />
       </Field>
+
+      {fromSite && toSite && item && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-muted/50 px-3 py-2 text-xs">
+          <span className="font-medium">{item.itemCode}</span>
+          <span className="text-muted-foreground">·</span>
+          <span>{fromSite.name}</span>
+          <ArrowRight className="size-3 text-muted-foreground" />
+          <span>{toSite.name}</span>
+          {quantity && Number(quantity) > 0 && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-medium">{Number(quantity)} unit</span>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onCancel}>
