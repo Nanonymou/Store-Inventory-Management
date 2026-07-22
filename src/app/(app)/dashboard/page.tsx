@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StockDashboardTable } from "@/components/stock-dashboard-table";
+import { ValueSummary } from "@/components/value-summary";
 import { MOCK_MASTER_ITEMS, MOCK_SITES, mockDailyStockForSite } from "@/lib/mock-data";
 import { todayISODate } from "@/lib/date";
 
@@ -50,11 +51,7 @@ export default function DashboardPage() {
           <Wallet className="size-4" />
           Ringkasan Nilai
         </div>
-        <Card className="border-dashed">
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            Ringkasan nilai Rupiah per jalur stok akan ditampilkan di sini.
-          </CardContent>
-        </Card>
+        <ValueSummary items={MOCK_MASTER_ITEMS} rows={rows} />
       </section>
 
       {/* Region: filters & search (populated by the "Filter & Pencarian" step). */}
