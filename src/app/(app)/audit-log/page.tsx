@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ScrollText, X } from "lucide-react";
+import { ScrollText } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -9,31 +9,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { AuditLogTable, actionMeta } from "@/components/audit-log-table";
+import {
+  AuditLogFilters,
+  EMPTY_AUDIT_FILTERS,
+  type AuditFilterState,
+} from "@/components/audit-log-filters";
 import { MOCK_AUDIT_LOGS } from "@/lib/audit-mock";
 import { toISODate } from "@/lib/date";
 
 /**
- * Audit Log (Admin only). Renders the activity trail on mock data with a filter
- * by user; date filter and search arrive in the following steps.
+ * Audit Log (Admin only). Integrates the user, action-type, and date-range
+ * filters over the activity trail (mock data); all filters compose and update
+ * the table live.
  */
 export default function AuditLogPage() {
-  const [user, setUser] = React.useState<string>("all");
-  const [action, setAction] = React.useState<string>("all");
-  const [from, setFrom] = React.useState<string>("");
-  const [to, setTo] = React.useState<string>("");
+  const [filters, setFilters] =
+    React.useState<AuditFilterState>(EMPTY_AUDIT_FILTERS);
 
-  // Unique users present in the log, for the filter dropdown.
+  // Filter-option sources derived from the log.
   const users = React.useMemo(() => {
     const names = new Set(MOCK_AUDIT_LOGS.map((l) => l.userName));
     return Array.from(names).sort((a, b) => a.localeCompare(b, "id"));
   }, []);
 
-  // Unique action types present in the log, labelled via actionMeta.
   const actions = React.useMemo(() => {
     const keys = new Set(MOCK_AUDIT_LOGS.map((l) => l.action));
     return Array.from(keys)
@@ -44,20 +43,17 @@ export default function AuditLogPage() {
   const entries = React.useMemo(() => {
     return [...MOCK_AUDIT_LOGS]
       .filter((l) => {
-        if (user !== "all" && l.userName !== user) return false;
-        if (action !== "all" && l.action !== action) return false;
-        // Compare on the calendar date (inclusive bounds).
+        if (filters.user !== "all" && l.userName !== filters.user) return false;
+        if (filters.action !== "all" && l.action !== filters.action) {
+          return false;
+        }
         const day = toISODate(new Date(l.createdAt));
-        if (from && day < from) return false;
-        if (to && day > to) return false;
+        if (filters.from && day < filters.from) return false;
+        if (filters.to && day > filters.to) return false;
         return true;
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [user, action, from, to]);
-
-  const hasFilter =
-    user !== "all" || action !== "all" || from !== "" || to !== "";
-  const rangeInvalid = from !== "" && to !== "" && from > to;
+  }, [filters]);
 
   return (
     <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -74,82 +70,19 @@ export default function AuditLogPage() {
       </header>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 border-b pb-4">
+        <CardHeader className="flex flex-col gap-4 border-b pb-4">
           <div className="space-y-1">
             <CardTitle>Aktivitas Sistem</CardTitle>
             <CardDescription>
               {entries.length} dari {MOCK_AUDIT_LOGS.length} aktivitas
             </CardDescription>
           </div>
-          <div className="flex flex-col flex-wrap gap-3 sm:flex-row sm:items-end">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="filter-user">Pengguna</Label>
-              <Select
-                value={user}
-                onValueChange={setUser}
-                options={[
-                  { value: "all", label: "Semua Pengguna" },
-                  ...users.map((u) => ({ value: u, label: u })),
-                ]}
-                className="w-full sm:w-[220px]"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="filter-action">Jenis Aksi</Label>
-              <Select
-                value={action}
-                onValueChange={setAction}
-                options={[
-                  { value: "all", label: "Semua Aksi" },
-                  ...actions,
-                ]}
-                className="w-full sm:w-[190px]"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="filter-from">Dari tanggal</Label>
-              <Input
-                id="filter-from"
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(e) => setFrom(e.target.value)}
-                className="w-full sm:w-[170px]"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="filter-to">Sampai tanggal</Label>
-              <Input
-                id="filter-to"
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-full sm:w-[170px]"
-              />
-            </div>
-            {hasFilter && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setUser("all");
-                  setAction("all");
-                  setFrom("");
-                  setTo("");
-                }}
-              >
-                <X className="size-4" />
-                Reset
-              </Button>
-            )}
-          </div>
-          {rangeInvalid && (
-            <p className="text-xs text-destructive">
-              Tanggal &quot;Dari&quot; tidak boleh melewati &quot;Sampai&quot;.
-            </p>
-          )}
+          <AuditLogFilters
+            value={filters}
+            onChange={setFilters}
+            users={users}
+            actions={actions}
+          />
         </CardHeader>
         <CardContent className="p-0">
           <AuditLogTable entries={entries} />
