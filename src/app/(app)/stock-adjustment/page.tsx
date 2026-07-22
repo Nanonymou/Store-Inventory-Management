@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import { AdjustmentHistoryTable } from "@/components/adjustment-history-table";
 import {
   AdjustmentForm,
@@ -35,6 +36,7 @@ import { todayISODate } from "@/lib/date";
  */
 export default function StockAdjustmentPage() {
   const isAdmin = useRequireAdmin();
+  const { toast } = useToast();
 
   const [adjustments, setAdjustments] =
     React.useState<StockAdjustment[]>(MOCK_ADJUSTMENTS);
@@ -67,6 +69,13 @@ export default function StockAdjustmentPage() {
     };
     setAdjustments((prev) => [adjustment, ...prev]);
     setFormOpen(false);
+
+    const diff = adjustment.after - adjustment.before;
+    toast({
+      variant: "success",
+      title: "Penyesuaian tersimpan",
+      description: `${item.itemCode} di ${site.name}: ${before} → ${values.physicalCount} (${diff > 0 ? `+${diff}` : diff}).`,
+    });
   };
 
   const sorted = React.useMemo(

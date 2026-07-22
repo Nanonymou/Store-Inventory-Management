@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { SessionProvider } from "@/components/session-provider";
 import { RouteGuard } from "@/components/route-guard";
+import { ToastProvider } from "@/components/ui/toast";
 
 export default function AppLayout({
   children,
@@ -9,9 +10,11 @@ export default function AppLayout({
 }) {
   return (
     <SessionProvider>
-      <AppShell>
-        <RouteGuard>{children}</RouteGuard>
-      </AppShell>
+      <ToastProvider>
+        <AppShell>
+          <RouteGuard>{children}</RouteGuard>
+        </AppShell>
+      </ToastProvider>
     </SessionProvider>
   );
 }
