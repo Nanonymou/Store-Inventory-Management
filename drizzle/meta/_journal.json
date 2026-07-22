@@ -29,6 +29,13 @@
       "when": 1784741997934,
       "tag": "0003_far_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784742734374,
+      "tag": "0004_flashy_hex",
+      "breakpoints": true
     }
   ]
 }

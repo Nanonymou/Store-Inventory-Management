@@ -25,6 +25,13 @@ import {
 /** Access roles: a site-bound Storeman or a global Admin. */
 export const userRole = pgEnum("user_role", ["admin", "storeman"]);
 
+/** Lifecycle status of an inter-site stock transfer. */
+export const transferStatus = pgEnum("transfer_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 /** Item catalog sections (the four PRD groupings). */
 export const itemSections = pgTable("item_sections", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -173,6 +180,51 @@ export const dailyStock = pgTable(
   }),
 );
 
+/**
+ * Inter-site stock transfers. Records a movement of one item from an origin site
+ * to a destination site, its quantity, review status, and the users who
+ * requested and checked it. On approval the stock at both sites is adjusted
+ * (applied by the service, not this schema).
+ */
+export const stockTransfers = pgTable(
+  "stock_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transferDate: date("transfer_date").notNull(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => masterItems.id, { onDelete: "restrict" }),
+    fromSiteId: uuid("from_site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "restrict" }),
+    toSiteId: uuid("to_site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "restrict" }),
+    quantity: integer("quantity").notNull(),
+    status: transferStatus("status").notNull().default("pending"),
+    note: text("note"),
+    requestedBy: uuid("requested_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    checkedBy: uuid("checked_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    fromSiteIdx: index("idx_stock_transfers_from_site").on(t.fromSiteId),
+    toSiteIdx: index("idx_stock_transfers_to_site").on(t.toSiteId),
+    itemIdx: index("idx_stock_transfers_item").on(t.itemId),
+    dateIdx: index("idx_stock_transfers_date").on(t.transferDate),
+    statusIdx: index("idx_stock_transfers_status").on(t.status),
+  }),
+);
+
 /** Audit trail of user activity (create / update / delete / access). */
 export const auditLogs = pgTable(
   "audit_logs",
@@ -257,6 +309,29 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   }),
 }));
 
+export const stockTransfersRelations = relations(stockTransfers, ({ one }) => ({
+  item: one(masterItems, {
+    fields: [stockTransfers.itemId],
+    references: [masterItems.id],
+  }),
+  fromSite: one(sites, {
+    fields: [stockTransfers.fromSiteId],
+    references: [sites.id],
+  }),
+  toSite: one(sites, {
+    fields: [stockTransfers.toSiteId],
+    references: [sites.id],
+  }),
+  requester: one(users, {
+    fields: [stockTransfers.requestedBy],
+    references: [users.id],
+  }),
+  checker: one(users, {
+    fields: [stockTransfers.checkedBy],
+    references: [users.id],
+  }),
+}));
+
 export type ItemSectionRow = typeof itemSections.$inferSelect;
 export type SiteRow = typeof sites.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
@@ -267,3 +342,5 @@ export type NewMasterItemRow = typeof masterItems.$inferInsert;
 export type DailyStockRow = typeof dailyStock.$inferSelect;
 export type NewDailyStockRow = typeof dailyStock.$inferInsert;
 export type AuditLogRow = typeof auditLogs.$inferSelect;
+export type StockTransferRow = typeof stockTransfers.$inferSelect;
+export type NewStockTransferRow = typeof stockTransfers.$inferInsert;
