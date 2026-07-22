@@ -1,6 +1,6 @@
-import { and, asc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { itemSections, masterItems } from "@/db/schema";
+import { dailyStock, itemSections, masterItems } from "@/db/schema";
 import { ITEM_SECTIONS } from "@/lib/types";
 
 /** Raised on invalid item input (400) or a duplicate item code (409). */
@@ -185,6 +185,44 @@ export async function updateMasterItem(
     sectionId,
     isActive: existing.isActive === 1,
   };
+}
+
+export interface DeleteResult {
+  /** "deleted" = row removed; "deactivated" = soft-deleted to keep history. */
+  mode: "deleted" | "deactivated";
+  itemCode: string;
+}
+
+/**
+ * Delete a master item. If it has no daily-stock history it is removed
+ * outright; if history exists it is soft-deleted (deactivated) so past records
+ * keep referencing it. Throws 404 if the item does not exist.
+ */
+export async function deleteMasterItem(id: string): Promise<DeleteResult> {
+  const [existing] = await db
+    .select({ id: masterItems.id, itemCode: masterItems.itemCode })
+    .from(masterItems)
+    .where(eq(masterItems.id, id))
+    .limit(1);
+  if (!existing) {
+    throw new MasterItemError(404, "Item tidak ditemukan.");
+  }
+
+  const [{ refs }] = await db
+    .select({ refs: count() })
+    .from(dailyStock)
+    .where(eq(dailyStock.itemId, id));
+
+  if (refs > 0) {
+    await db
+      .update(masterItems)
+      .set({ isActive: 0, updatedAt: new Date() })
+      .where(eq(masterItems.id, id));
+    return { mode: "deactivated", itemCode: existing.itemCode };
+  }
+
+  await db.delete(masterItems).where(eq(masterItems.id, id));
+  return { mode: "deleted", itemCode: existing.itemCode };
 }
 
 export interface ListItemsFilters {

@@ -4,6 +4,7 @@ import { AuthorizationError, requireAdmin } from "@/lib/auth/rbac";
 import { guardWithAudit, logActivity } from "@/lib/auth/audit";
 import {
   MasterItemError,
+  deleteMasterItem,
   parseMasterItemInput,
   updateMasterItem,
 } from "@/lib/master-item/service";
@@ -48,6 +49,44 @@ export async function PUT(
     return NextResponse.json({ ok: true, item });
   } catch (err) {
     return errorResponse(err, "PUT");
+  }
+}
+
+/**
+ * DELETE /api/master-items/:id — remove an item (Admin only). Items with stock
+ * history are soft-deleted (deactivated) to preserve referential integrity;
+ * items with none are removed outright. Records the action in the audit log.
+ */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const session = await getSession();
+    const admin = await guardWithAudit(() => requireAdmin(session), {
+      user: session,
+      resourceTarget: `master_items:delete:${id}`,
+    });
+
+    const result = await deleteMasterItem(id);
+
+    await logActivity({
+      userId: admin.id,
+      action:
+        result.mode === "deleted"
+          ? "delete_master_item"
+          : "deactivate_master_item",
+      resourceTarget: `master_item:${result.itemCode}`,
+      detail:
+        result.mode === "deleted"
+          ? "Menghapus item."
+          : "Menonaktifkan item (punya riwayat stok).",
+    });
+
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    return errorResponse(err, "DELETE");
   }
 }
 
