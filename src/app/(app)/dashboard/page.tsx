@@ -17,6 +17,7 @@ import {
   DashboardFilters,
   type DashboardFilterState,
 } from "@/components/dashboard-filters";
+import { ExportButtons } from "@/components/export-buttons";
 import {
   MOCK_MASTER_ITEMS,
   MOCK_SITES,
@@ -87,6 +88,13 @@ export default function DashboardPage() {
         sites={MOCK_SITES}
         value={filters}
         onChange={setFilters}
+        actions={
+          <ExportButtons
+            items={filteredItems}
+            rows={filteredRows}
+            meta={{ siteName: activeSite.name, date: today }}
+          />
+        }
       />
 
       {/* Value summary. */}
