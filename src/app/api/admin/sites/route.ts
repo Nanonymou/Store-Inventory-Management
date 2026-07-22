@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { AuthorizationError, requireAdmin } from "@/lib/auth/rbac";
-import { guardWithAudit } from "@/lib/auth/audit";
+import { AuthorizationError } from "@/lib/auth/rbac";
+import { requireAdminApi } from "@/lib/auth/api-guard";
 import { listAllSitesWithStats } from "@/lib/reference/service";
 
 // Reads the database + session — Node.js runtime required.
@@ -14,12 +13,7 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   try {
-    const session = await getSession();
-    await guardWithAudit(() => requireAdmin(session), {
-      user: session,
-      resourceTarget: "admin_sites:list",
-    });
-
+    await requireAdminApi("admin_sites:list");
     const sites = await listAllSitesWithStats();
     return NextResponse.json({ ok: true, count: sites.length, sites });
   } catch (err) {
