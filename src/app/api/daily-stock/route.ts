@@ -6,15 +6,48 @@ import {
   assertSiteAccess,
 } from "@/lib/auth/rbac";
 import { guardWithAudit, logActivity } from "@/lib/auth/audit";
-import { todayISODate } from "@/lib/date";
+import { isValidISODate, todayISODate } from "@/lib/date";
 import {
   ValidationError,
+  getDailyStockView,
   parseSaveDailyStockPayload,
   saveDailyStock,
 } from "@/lib/daily-stock/service";
 
 // Uses the database + next/headers — must run on the Node.js runtime.
 export const runtime = "nodejs";
+
+/**
+ * GET /api/daily-stock?siteId=…&date=YYYY-MM-DD — read a day's transaction view
+ * for a site: every active item with its stored movements, or a blank row whose
+ * Beginning Balance carries from the previous day. Future dates are rejected.
+ */
+export async function GET(req: Request) {
+  try {
+    const session = await getSession();
+    const { searchParams } = new URL(req.url);
+    const siteId = (searchParams.get("siteId") ?? "").trim();
+    const date = (searchParams.get("date") ?? todayISODate()).trim();
+
+    if (!siteId) throw new ValidationError("Parameter siteId wajib diisi.");
+    if (!isValidISODate(date)) {
+      throw new ValidationError("Parameter date harus format YYYY-MM-DD.");
+    }
+    if (date > todayISODate()) {
+      throw new ValidationError("Tanggal masa depan tidak tersedia.");
+    }
+
+    await guardWithAudit(() => assertSiteAccess(session, siteId), {
+      user: session,
+      resourceTarget: `daily_stock:${siteId}:${date}`,
+    });
+
+    const rows = await getDailyStockView(siteId, date);
+    return NextResponse.json({ ok: true, siteId, date, rows });
+  } catch (err) {
+    return errorResponse(err, "GET");
+  }
+}
 
 /**
  * POST /api/daily-stock — save (upsert) a day's transaction entries for a site.
@@ -59,22 +92,21 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    if (err instanceof AuthorizationError) {
-      return NextResponse.json(
-        { ok: false, error: err.message },
-        { status: err.status },
-      );
-    }
-    if (err instanceof ValidationError) {
-      return NextResponse.json(
-        { ok: false, error: err.message },
-        { status: err.status },
-      );
-    }
-    console.error("[api/daily-stock] POST failed:", err);
+    return errorResponse(err, "POST");
+  }
+}
+
+/** Map known error types to JSON responses; log and 500 for the rest. */
+function errorResponse(err: unknown, method: string) {
+  if (err instanceof AuthorizationError || err instanceof ValidationError) {
     return NextResponse.json(
-      { ok: false, error: "Terjadi kesalahan pada server." },
-      { status: 500 },
+      { ok: false, error: err.message },
+      { status: err.status },
     );
   }
+  console.error(`[api/daily-stock] ${method} failed:`, err);
+  return NextResponse.json(
+    { ok: false, error: "Terjadi kesalahan pada server." },
+    { status: 500 },
+  );
 }

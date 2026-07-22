@@ -13,6 +13,14 @@ export function todayISODate(): string {
   return toISODate(new Date());
 }
 
+/** The ISO date (YYYY-MM-DD) of the day before the given ISO date. */
+export function previousISODate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  return toISODate(dt);
+}
+
 /** Whether a string is a valid YYYY-MM-DD calendar date. */
 export function isValidISODate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

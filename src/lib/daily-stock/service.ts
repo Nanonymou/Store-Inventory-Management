@@ -1,12 +1,12 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyStock, masterItems } from "@/db/schema";
+import { dailyStock, itemSections, masterItems } from "@/db/schema";
 import {
   MOVEMENT_COLUMNS,
   computeBalance,
   type DailyStockMovements,
 } from "@/lib/types";
-import { isValidISODate } from "@/lib/date";
+import { isValidISODate, previousISODate } from "@/lib/date";
 
 /** Raised on invalid input; carries a 400 status for the route to surface. */
 export class ValidationError extends Error {
@@ -177,4 +177,110 @@ export async function getDailyStock(siteId: string, date: string) {
     .select()
     .from(dailyStock)
     .where(and(eq(dailyStock.siteId, siteId), eq(dailyStock.recordDate, date)));
+}
+
+/** A composed row for the daily transaction view: item + movements + balance. */
+export interface DailyStockViewRow extends DailyStockMovements {
+  itemId: string;
+  itemCode: string;
+  description: string;
+  brand: string | null;
+  size: string | null;
+  unit: string | null;
+  price: number;
+  section: string;
+  balance: number;
+  /** True when the row was actually saved for this date (vs. a fresh default). */
+  persisted: boolean;
+}
+
+const ZERO_MOVEMENTS: Omit<DailyStockMovements, "begBalance"> = {
+  receiving: 0,
+  regular: 0,
+  snack: 0,
+  backcharge: 0,
+  hkl: 0,
+  event: 0,
+  ent: 0,
+  toQty: 0,
+  spoil: 0,
+};
+
+/**
+ * Build the full daily transaction view for a site + date: every active master
+ * item paired with its stored movements, or — when nothing was saved yet — a
+ * blank row whose Beginning Balance auto-carries from the previous day's
+ * Balance (falling back to 0 when there is no history).
+ */
+export async function getDailyStockView(
+  siteId: string,
+  date: string,
+): Promise<DailyStockViewRow[]> {
+  const items = await db
+    .select({
+      id: masterItems.id,
+      itemCode: masterItems.itemCode,
+      description: masterItems.description,
+      brand: masterItems.brand,
+      size: masterItems.size,
+      unit: masterItems.unit,
+      price: masterItems.price,
+      section: itemSections.name,
+    })
+    .from(masterItems)
+    .innerJoin(itemSections, eq(masterItems.sectionId, itemSections.id))
+    .where(eq(masterItems.isActive, 1))
+    .orderBy(asc(masterItems.itemCode));
+
+  const [current, previous] = await Promise.all([
+    getDailyStock(siteId, date),
+    getDailyStock(siteId, previousISODate(date)),
+  ]);
+
+  const currentByItem = new Map(current.map((r) => [r.itemId, r]));
+  const prevBalanceByItem = new Map(previous.map((r) => [r.itemId, r.balance]));
+
+  return items.map((item) => {
+    const stored = currentByItem.get(item.id);
+    if (stored) {
+      return {
+        itemId: item.id,
+        itemCode: item.itemCode,
+        description: item.description,
+        brand: item.brand,
+        size: item.size,
+        unit: item.unit,
+        price: item.price,
+        section: item.section,
+        begBalance: stored.begBalance,
+        receiving: stored.receiving,
+        regular: stored.regular,
+        snack: stored.snack,
+        backcharge: stored.backcharge,
+        hkl: stored.hkl,
+        event: stored.event,
+        ent: stored.ent,
+        toQty: stored.toQty,
+        spoil: stored.spoil,
+        balance: stored.balance,
+        persisted: true,
+      };
+    }
+
+    const begBalance = prevBalanceByItem.get(item.id) ?? 0;
+    const movements: DailyStockMovements = { begBalance, ...ZERO_MOVEMENTS };
+    return {
+      itemId: item.id,
+      itemCode: item.itemCode,
+      description: item.description,
+      brand: item.brand,
+      size: item.size,
+      unit: item.unit,
+      price: item.price,
+      section: item.section,
+      ...movements,
+      balance: computeBalance(movements),
+      persisted: false,
+    };
+  });
 }
