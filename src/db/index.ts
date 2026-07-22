@@ -23,9 +23,22 @@ const globalForDb = globalThis as unknown as {
   __pgClient?: ReturnType<typeof postgres>;
 };
 
+/**
+ * Options tuned for serverless (Vercel + Neon/Supabase pooler):
+ * - `max: 1` keeps each function instance to a single connection.
+ * - `prepare: false` is required for transaction-mode poolers (PgBouncer /
+ *   Supavisor / Neon pooled endpoint), which don't support prepared statements.
+ * - short idle/connect timeouts release connections promptly.
+ * Point the connection string at the POOLED endpoint in production.
+ */
 const client =
   globalForDb.__pgClient ??
-  postgres(connectionString, { max: 1, prepare: false });
+  postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  });
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.__pgClient = client;

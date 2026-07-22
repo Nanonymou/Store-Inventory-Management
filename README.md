@@ -44,9 +44,16 @@ npm run dev        # http://localhost:3000
 | Storeman (Site B) | `storeman.b@stokman.test` | `storeman123` |
 
 Admin diarahkan ke **Dashboard** dan dapat berpindah antar 11 site, mengelola
-master item, transfer, penyesuaian, dan melihat audit log. Storeman terkunci
-pada site-nya dan halaman **Transaksi Harian** (hanya bisa input tanggal hari
-ini; tanggal lampau hanya bisa dilihat).
+master item, transfer, penyesuaian, **pengguna** (`/users`), dan melihat audit
+log. Storeman terkunci pada site-nya dan halaman **Transaksi Harian** (hanya
+bisa input tanggal hari ini; tanggal lampau hanya bisa dilihat).
+
+- **Manajemen Pengguna** (`/users`, Admin): buat/edit/hapus akun, reset password
+  sementara. Akun baru & yang direset **wajib ganti password saat login pertama**.
+- **Profil** (`/profile`): setiap pengguna bisa mengubah passwordnya sendiri
+  (klik nama pengguna di kanan atas).
+- **Health check** (`GET /api/health`): probe koneksi database (200 sehat /
+  503 bila DB tidak terjangkau).
 
 ## Perintah database
 
