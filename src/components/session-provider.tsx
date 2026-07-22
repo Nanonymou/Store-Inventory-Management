@@ -20,6 +20,18 @@ interface SessionContextValue {
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
+/** Storage key for the Admin's selected site (cleared on logout). */
+const ACTIVE_SITE_KEY = "stokman:activeSiteId";
+
+function readStoredSiteId(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    return localStorage.getItem(ACTIVE_SITE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Provides the authenticated session to the app pages. Reads the session cookie
  * on mount and redirects to /login when absent. Exposes the active site — the
@@ -39,11 +51,28 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setUser(current);
-    setActiveSiteId(current.role === "storeman" && current.siteId
-      ? current.siteId
-      : MOCK_SITES[0].id);
+    if (current.role === "storeman" && current.siteId) {
+      setActiveSiteId(current.siteId);
+    } else {
+      // Admin: restore the previously chosen site (if still valid) so the
+      // selection survives reloads and new tabs, not just client navigation.
+      const stored = readStoredSiteId();
+      const valid = stored && MOCK_SITES.some((s) => s.id === stored);
+      setActiveSiteId(valid ? stored : MOCK_SITES[0].id);
+    }
     setChecked(true);
   }, [router]);
+
+  // Persist the Admin's active-site choice so it is remembered across sessions.
+  React.useEffect(() => {
+    if (!checked || !user || user.role !== "admin" || !activeSiteId) return;
+    try {
+      localStorage.setItem(ACTIVE_SITE_KEY, activeSiteId);
+    } catch {
+      // Storage may be unavailable (private mode) — selection still works
+      // in-memory for the current navigation.
+    }
+  }, [checked, user, activeSiteId]);
 
   const logout = React.useCallback(
     (reason?: "idle") => {
