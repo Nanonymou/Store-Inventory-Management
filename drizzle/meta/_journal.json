@@ -36,6 +36,13 @@
       "when": 1784742734374,
       "tag": "0004_flashy_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784743047565,
+      "tag": "0005_orange_maginty",
+      "breakpoints": true
     }
   ]
 }

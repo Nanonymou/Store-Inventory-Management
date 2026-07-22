@@ -225,6 +225,42 @@ export const stockTransfers = pgTable(
   }),
 );
 
+/**
+ * Stock adjustments (opname). Records a corrected physical count for an item at
+ * a site — the stock before and after, the reason, and who made it — for audit
+ * and traceability. Applying the new value to current stock is done by the
+ * service.
+ */
+export const stockAdjustments = pgTable(
+  "stock_adjustments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adjustmentDate: date("adjustment_date").notNull(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "restrict" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => masterItems.id, { onDelete: "restrict" }),
+    beforeQty: integer("before_qty").notNull(),
+    afterQty: integer("after_qty").notNull(),
+    reason: varchar("reason", { length: 60 }).notNull(),
+    note: text("note"),
+    adjustedBy: uuid("adjusted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    siteIdx: index("idx_stock_adjustments_site").on(t.siteId),
+    itemIdx: index("idx_stock_adjustments_item").on(t.itemId),
+    dateIdx: index("idx_stock_adjustments_date").on(t.adjustmentDate),
+    reasonIdx: index("idx_stock_adjustments_reason").on(t.reason),
+  }),
+);
+
 /** Audit trail of user activity (create / update / delete / access). */
 export const auditLogs = pgTable(
   "audit_logs",
@@ -309,6 +345,24 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   }),
 }));
 
+export const stockAdjustmentsRelations = relations(
+  stockAdjustments,
+  ({ one }) => ({
+    site: one(sites, {
+      fields: [stockAdjustments.siteId],
+      references: [sites.id],
+    }),
+    item: one(masterItems, {
+      fields: [stockAdjustments.itemId],
+      references: [masterItems.id],
+    }),
+    adjuster: one(users, {
+      fields: [stockAdjustments.adjustedBy],
+      references: [users.id],
+    }),
+  }),
+);
+
 export const stockTransfersRelations = relations(stockTransfers, ({ one }) => ({
   item: one(masterItems, {
     fields: [stockTransfers.itemId],
@@ -344,3 +398,5 @@ export type NewDailyStockRow = typeof dailyStock.$inferInsert;
 export type AuditLogRow = typeof auditLogs.$inferSelect;
 export type StockTransferRow = typeof stockTransfers.$inferSelect;
 export type NewStockTransferRow = typeof stockTransfers.$inferInsert;
+export type StockAdjustmentRow = typeof stockAdjustments.$inferSelect;
+export type NewStockAdjustmentRow = typeof stockAdjustments.$inferInsert;
