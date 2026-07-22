@@ -17,6 +17,7 @@ import {
 } from "@/components/audit-log-filters";
 import { MOCK_AUDIT_LOGS } from "@/lib/audit-mock";
 import { useAuditLogs } from "@/hooks/use-audit-logs";
+import { useRequireAdmin } from "@/hooks/use-require-admin";
 
 /**
  * Audit Log (Admin only). Integrates the user, action-type, and date-range
@@ -24,6 +25,10 @@ import { useAuditLogs } from "@/hooks/use-audit-logs";
  * the table live.
  */
 export default function AuditLogPage() {
+  // Audit Log is Admin-only; withhold content from non-Admins (they are
+  // redirected to the access-denied page).
+  const isAdmin = useRequireAdmin();
+
   const [filters, setFilters] =
     React.useState<AuditFilterState>(EMPTY_AUDIT_FILTERS);
 
@@ -42,6 +47,9 @@ export default function AuditLogPage() {
 
   // Fetch from the backend (falls back to filtered mock until the API exists).
   const { entries, isLoading, usingMock } = useAuditLogs(filters);
+
+  // All hooks are called above; safe to withhold render for non-Admins.
+  if (!isAdmin) return null;
 
   return (
     <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
