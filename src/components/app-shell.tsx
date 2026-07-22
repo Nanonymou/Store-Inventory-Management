@@ -27,9 +27,14 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+/** Everyday operational pages. */
+const MAIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard Stok", icon: LayoutDashboard },
   { href: "/transaksi", label: "Transaksi Harian", icon: ClipboardList },
+];
+
+/** Admin-only administration pages (grouped under a section heading). */
+const ADMIN_NAV: NavItem[] = [
   { href: "/master-item", label: "Master Item", icon: Boxes, adminOnly: true },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
 ];
@@ -47,7 +52,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const adminNav = isAdmin ? ADMIN_NAV : [];
+  // Flat list for the mobile top nav.
+  const mobileNav = [...MAIN_NAV, ...adminNav];
+
+  const navLinkClass = (href: string) =>
+    cn(
+      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+      isActive(href)
+        ? "bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+    );
 
   return (
     <div className="flex min-h-screen">
@@ -63,21 +78,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive(item.href)
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
+          {MAIN_NAV.map((item) => (
+            <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
               <item.icon className="size-4" />
               {item.label}
             </Link>
           ))}
+
+          {adminNav.length > 0 && (
+            <>
+              <div className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                Administrasi
+              </div>
+              {adminNav.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={navLinkClass(item.href)}
+                >
+                  <item.icon className="size-4" />
+                  {item.label}
+                </Link>
+              ))}
+            </>
+          )}
         </nav>
         <div className="border-t p-4 text-[11px] text-muted-foreground">
           Data tiruan · pengembangan UI
@@ -92,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-sm font-bold">StokMan</span>
           </div>
           <nav className="flex items-center gap-1 overflow-x-auto lg:hidden">
-            {navItems.map((item) => (
+            {mobileNav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
