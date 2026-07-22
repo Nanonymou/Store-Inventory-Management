@@ -9,23 +9,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
 import {
   TransferHistoryTable,
   type TransferSort,
   type TransferSortKey,
 } from "@/components/transfer-history-table";
+import {
+  TransferFilters,
+  EMPTY_TRANSFER_FILTERS,
+  type TransferFilterState,
+} from "@/components/transfer-filters";
 import { useRequireAdmin } from "@/hooks/use-require-admin";
-import { MOCK_TRANSFERS, type TransferStatus } from "@/lib/transfer-mock";
+import { MOCK_TRANSFERS } from "@/lib/transfer-mock";
 
 /**
- * Stock Transfer (Admin only). This step renders the transfer history on mock
- * data; the transfer form and stock validation arrive in the following steps.
+ * Stock Transfer (Admin only). Transfer history on mock data with status/site/
+ * keyword filters and sorting; the transfer form and stock validation arrive in
+ * the following steps.
  */
 export default function StockTransferPage() {
   const isAdmin = useRequireAdmin();
 
-  const [status, setStatus] = React.useState<TransferStatus | "all">("all");
+  const [filters, setFilters] = React.useState<TransferFilterState>(
+    EMPTY_TRANSFER_FILTERS,
+  );
   const [sort, setSort] = React.useState<TransferSort>({
     key: "date",
     dir: "desc",
@@ -39,10 +46,36 @@ export default function StockTransferPage() {
     );
   };
 
+  // Distinct site names (origin or destination) for the site filter.
+  const sites = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const t of MOCK_TRANSFERS) {
+      set.add(t.fromSite);
+      set.add(t.toSite);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "id"));
+  }, []);
+
   const transfers = React.useMemo(() => {
-    const filtered = MOCK_TRANSFERS.filter(
-      (t) => status === "all" || t.status === status,
-    );
+    const q = filters.query.trim().toLowerCase();
+    const filtered = MOCK_TRANSFERS.filter((t) => {
+      if (filters.status !== "all" && t.status !== filters.status) return false;
+      if (
+        filters.site !== "all" &&
+        t.fromSite !== filters.site &&
+        t.toSite !== filters.site
+      ) {
+        return false;
+      }
+      if (
+        q &&
+        !t.itemCode.toLowerCase().includes(q) &&
+        !t.itemDescription.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
     const sorted = [...filtered].sort((a, b) => {
       const cmp =
         sort.key === "quantity"
@@ -51,7 +84,7 @@ export default function StockTransferPage() {
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [status, sort]);
+  }, [filters, sort]);
 
   if (!isAdmin) return null;
 
@@ -70,29 +103,20 @@ export default function StockTransferPage() {
       </header>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="flex flex-col gap-4 border-b pb-4">
           <div className="space-y-1">
             <CardTitle>Riwayat Transfer</CardTitle>
             <CardDescription>
               {transfers.length} dari {MOCK_TRANSFERS.length} mutasi
             </CardDescription>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Status
-            </span>
-            <Select
-              value={status}
-              onValueChange={(v) => setStatus(v as TransferStatus | "all")}
-              options={[
-                { value: "all", label: "Semua Status" },
-                { value: "approved", label: "Disetujui" },
-                { value: "pending", label: "Menunggu" },
-                { value: "rejected", label: "Ditolak" },
-              ]}
-              className="w-full sm:w-[190px]"
-            />
-          </div>
+          <TransferFilters
+            value={filters}
+            onChange={setFilters}
+            sites={sites}
+            sort={sort}
+            onSortChange={setSort}
+          />
         </CardHeader>
         <CardContent className="p-0">
           <TransferHistoryTable
