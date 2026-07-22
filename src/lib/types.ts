@@ -8,6 +8,18 @@ export const ITEM_SECTIONS = [
 
 export type ItemSection = (typeof ITEM_SECTIONS)[number];
 
+/** Access roles. Storeman is site-bound; Admin has global access. */
+export type UserRole = "admin" | "storeman";
+
+/** The signed-in user's session context (mocked on the frontend for now). */
+export interface SessionUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  /** Bound site for a Storeman; null for an Admin (all sites). */
+  siteId: string | null;
+}
+
 /** Master item — the catalog record controlled by Admin. */
 export interface MasterItem {
   id: string;
