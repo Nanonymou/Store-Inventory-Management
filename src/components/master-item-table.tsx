@@ -102,7 +102,7 @@ export function MasterItemTable({
               <SortHeader sortKey="section">Section</SortHeader>
             </TableHead>
             {renderActions && (
-              <TableHead className="w-[120px] text-right">Aksi</TableHead>
+              <TableHead className="w-[150px] text-right">Aksi</TableHead>
             )}
           </TableRow>
         </TableHeader>

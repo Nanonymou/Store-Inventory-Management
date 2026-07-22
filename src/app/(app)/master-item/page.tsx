@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Boxes, Pencil, Plus, Search, X } from "lucide-react";
+import { Boxes, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -50,6 +50,7 @@ export default function MasterItemPage() {
   const [section, setSection] = React.useState<SectionFilter>("all");
   const [addOpen, setAddOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<MasterItem | null>(null);
+  const [deleting, setDeleting] = React.useState<MasterItem | null>(null);
   const [sort, setSort] = React.useState<MasterItemSort>({
     key: "itemCode",
     dir: "asc",
@@ -97,6 +98,12 @@ export default function MasterItemPage() {
       ),
     );
     setEditing(null);
+  };
+
+  const handleDelete = () => {
+    if (!deleting) return;
+    setCatalog((prev) => prev.filter((item) => item.id !== deleting.id));
+    setDeleting(null);
   };
 
   const items = React.useMemo(() => {
@@ -186,23 +193,35 @@ export default function MasterItemPage() {
             sort={sort}
             onSort={handleSort}
             renderActions={(item) => (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditing(item)}
-              >
-                <Pencil className="size-4" />
-                Edit
-              </Button>
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(item)}
+                >
+                  <Pencil className="size-4" />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Hapus ${item.itemCode}`}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setDeleting(item)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             )}
           />
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Data pada halaman ini masih tiruan (mock) — item baru tersimpan di sesi
-        browser saja hingga backend tersambung. Fitur edit dan hapus menyusul.
+        Data pada halaman ini masih tiruan (mock) — tambah, edit, dan hapus
+        tersimpan di sesi browser saja hingga backend tersambung.
       </p>
 
       <Dialog
@@ -236,6 +255,41 @@ export default function MasterItemPage() {
             onSubmit={handleEdit}
             onCancel={() => setEditing(null)}
           />
+        )}
+      </Dialog>
+
+      <Dialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Hapus Item"
+      >
+        {deleting && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Yakin ingin menghapus{" "}
+              <span className="font-medium text-foreground">
+                {deleting.itemCode} — {deleting.description}
+              </span>
+              ? Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleting(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+              >
+                <Trash2 className="size-4" />
+                Hapus
+              </Button>
+            </div>
+          </div>
         )}
       </Dialog>
     </main>
