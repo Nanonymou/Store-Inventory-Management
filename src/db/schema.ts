@@ -54,7 +54,37 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
+
+/**
+ * User ↔ site assignments. A Storeman's primary binding is `users.site_id`;
+ * this join table records the sites a user may access (one row per site),
+ * keeping the model open to multi-site assignment without changing the primary
+ * binding. The (user, site) pair is unique.
+ */
+export const userSite = pgTable(
+  "user_site",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uqUserSite: unique("uq_user_site").on(t.userId, t.siteId),
+    userIdx: index("idx_user_site_user").on(t.userId),
+    siteIdx: index("idx_user_site_site").on(t.siteId),
+  }),
+);
 
 /** Master item catalog (Admin-managed). */
 export const masterItems = pgTable(
@@ -175,6 +205,7 @@ export const masterItemsRelations = relations(masterItems, ({ one, many }) => ({
 export const sitesRelations = relations(sites, ({ many }) => ({
   users: many(users),
   dailyStock: many(dailyStock),
+  userSites: many(userSite),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -183,6 +214,18 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [sites.id],
   }),
   auditLogs: many(auditLogs),
+  userSites: many(userSite),
+}));
+
+export const userSiteRelations = relations(userSite, ({ one }) => ({
+  user: one(users, {
+    fields: [userSite.userId],
+    references: [users.id],
+  }),
+  site: one(sites, {
+    fields: [userSite.siteId],
+    references: [sites.id],
+  }),
 }));
 
 export const dailyStockRelations = relations(dailyStock, ({ one }) => ({
@@ -206,6 +249,8 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
 export type ItemSectionRow = typeof itemSections.$inferSelect;
 export type SiteRow = typeof sites.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
+export type NewUserRow = typeof users.$inferInsert;
+export type UserSiteRow = typeof userSite.$inferSelect;
 export type MasterItemRow = typeof masterItems.$inferSelect;
 export type NewMasterItemRow = typeof masterItems.$inferInsert;
 export type DailyStockRow = typeof dailyStock.$inferSelect;
