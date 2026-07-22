@@ -1,0 +1,151 @@
+import {
+  date,
+  doublePrecision,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+
+/**
+ * Database schema (Drizzle ORM / PostgreSQL).
+ *
+ * The daily transaction feature centres on `daily_stock`, which records one row
+ * per item per site per date. It references `master_items` and `sites`, so
+ * those parent tables — and the `item_sections` / `users` they depend on — are
+ * defined here too. `audit_logs` captures activity across the app.
+ */
+
+/** Access roles: a site-bound Storeman or a global Admin. */
+export const userRole = pgEnum("user_role", ["admin", "storeman"]);
+
+/** Item catalog sections (the four PRD groupings). */
+export const itemSections = pgTable("item_sections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull().unique(),
+});
+
+/** The 11 storage locations. */
+export const sites = pgTable("sites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull().unique(),
+  location: varchar("location", { length: 200 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Application users. A Storeman is bound to exactly one site; Admin is null. */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 160 }).notNull(),
+  email: varchar("email", { length: 200 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: userRole("role").notNull().default("storeman"),
+  siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+  /** Forces a password change on next login (temporary password). */
+  mustChangePassword: integer("must_change_password").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Master item catalog (Admin-managed). */
+export const masterItems = pgTable("master_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemCode: varchar("item_code", { length: 60 }).notNull().unique(),
+  description: varchar("description", { length: 240 }).notNull(),
+  brand: varchar("brand", { length: 120 }),
+  size: varchar("size", { length: 60 }),
+  unit: varchar("unit", { length: 40 }),
+  price: doublePrecision("price").notNull().default(0),
+  sectionId: uuid("section_id")
+    .notNull()
+    .references(() => itemSections.id, { onDelete: "restrict" }),
+  /** Soft-delete flag so historical stock rows keep referencing the item. */
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Daily stock — the heart of the daily transaction feature. One row per
+ * (record_date, item, site) holding all movement quantities and the derived
+ * balance. Uniqueness on that triple prevents duplicate entries for a day.
+ */
+export const dailyStock = pgTable(
+  "daily_stock",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recordDate: date("record_date").notNull(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => masterItems.id, { onDelete: "restrict" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+
+    // Movement columns (quantities).
+    begBalance: integer("beg_balance").notNull().default(0),
+    receiving: integer("receiving").notNull().default(0),
+    regular: integer("regular").notNull().default(0),
+    snack: integer("snack").notNull().default(0),
+    backcharge: integer("backcharge").notNull().default(0),
+    hkl: integer("hkl").notNull().default(0),
+    event: integer("event").notNull().default(0),
+    ent: integer("ent").notNull().default(0),
+    toQty: integer("to_qty").notNull().default(0),
+    spoil: integer("spoil").notNull().default(0),
+
+    /** Derived: beg + receiving − (regular + snack + … + spoil). Stored for reporting. */
+    balance: integer("balance").notNull().default(0),
+
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uqDayItemSite: unique("uq_daily_stock_day_item_site").on(
+      t.recordDate,
+      t.itemId,
+      t.siteId,
+    ),
+  }),
+);
+
+/** Audit trail of user activity (create / update / delete). */
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 60 }).notNull(),
+  resourceTarget: varchar("resource_target", { length: 240 }).notNull(),
+  detail: text("detail"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ItemSectionRow = typeof itemSections.$inferSelect;
+export type SiteRow = typeof sites.$inferSelect;
+export type UserRow = typeof users.$inferSelect;
+export type MasterItemRow = typeof masterItems.$inferSelect;
+export type DailyStockRow = typeof dailyStock.$inferSelect;
+export type NewDailyStockRow = typeof dailyStock.$inferInsert;
+export type AuditLogRow = typeof auditLogs.$inferSelect;
