@@ -92,6 +92,42 @@ export function assertSiteAccess(
   return u;
 }
 
+/**
+ * Resolve the site a stock request may actually read/write, applying the role
+ * rules centrally:
+ *   - Admin: uses the requested site (any of the 11). A missing site is a 403
+ *     here because stock is always per-site.
+ *   - Storeman: always pinned to their own bound site. A request for a
+ *     different site is denied (never silently redirected).
+ * Returns both the effective siteId and the authorized user.
+ */
+export function resolveStockSiteScope(
+  user: SessionUser | null,
+  requestedSiteId: string | null | undefined,
+): { user: SessionUser; siteId: string } {
+  const u = requireUser(user);
+  const requested = requestedSiteId?.trim() || null;
+
+  if (u.role === "storeman") {
+    if (!u.siteId) {
+      throw new AuthorizationError(403, "Akun Storeman tidak terikat site.");
+    }
+    if (requested && requested !== u.siteId) {
+      throw new AuthorizationError(
+        403,
+        "Storeman hanya dapat mengakses site miliknya.",
+      );
+    }
+    return { user: u, siteId: u.siteId };
+  }
+
+  // Admin.
+  if (!requested) {
+    throw new AuthorizationError(403, "Admin harus memilih site.");
+  }
+  return { user: u, siteId: requested };
+}
+
 /** Ensure the user may edit records for the given date. */
 export function assertCanEditDate(
   user: SessionUser | null,
