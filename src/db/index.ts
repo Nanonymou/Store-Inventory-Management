@@ -12,7 +12,14 @@ import * as schema from "./schema";
 const connectionString =
   process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? "";
 
-if (!connectionString) {
+/**
+ * Whether a connection string is configured. When false, postgres-js falls back
+ * to localhost:5432 and every query fails with ECONNREFUSED — the health check
+ * uses this flag to report "unconfigured" instead of that cryptic error.
+ */
+export const hasDatabaseUrl = connectionString !== "";
+
+if (!hasDatabaseUrl) {
   // Surface a clear message rather than a cryptic driver error at query time.
   console.warn(
     "[db] DATABASE_URL / POSTGRES_URL is not set — database queries will fail.",
