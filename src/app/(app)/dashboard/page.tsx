@@ -18,24 +18,28 @@ import {
   type DashboardFilterState,
 } from "@/components/dashboard-filters";
 import { ExportButtons } from "@/components/export-buttons";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useSession } from "@/components/session-provider";
 import { useAsync } from "@/hooks/use-async";
 import { apiGet } from "@/lib/api/client";
 import { splitStockView, type ApiStockViewRow } from "@/lib/api/types";
-import { todayISODate } from "@/lib/date";
+import { toISODate, todayISODate } from "@/lib/date";
 
 /** Dashboard Stok — central monitoring page, backed by /api/dashboard/stock. */
 export default function DashboardPage() {
-  const today = todayISODate();
   const { activeSite, activeSiteId, sites } = useSession();
+
+  const [selectedDate, setSelectedDate] = React.useState<Date>(() => new Date());
+  const isoDate = toISODate(selectedDate);
+  const isToday = isoDate === todayISODate();
 
   const { data, loading, error, reload } = useAsync(
     () =>
       apiGet<{ rows: ApiStockViewRow[] }>("/api/dashboard/stock", {
         siteId: activeSiteId,
-        date: today,
+        date: isoDate,
       }),
-    [activeSiteId, today],
+    [activeSiteId, isoDate],
   );
 
   const [filters, setFilters] = React.useState<DashboardFilterState>({
@@ -51,8 +55,8 @@ export default function DashboardPage() {
   }, [activeSiteId]);
 
   const { items: allItems, rows: allRows } = React.useMemo(
-    () => splitStockView(data?.rows ?? [], activeSiteId, today),
-    [data, activeSiteId, today],
+    () => splitStockView(data?.rows ?? [], activeSiteId, isoDate),
+    [data, activeSiteId, isoDate],
   );
 
   const filteredItems = React.useMemo(() => {
@@ -77,16 +81,33 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto flex max-w-[1500px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LayoutDashboard className="size-4" />
-          <span>StokMan — Dashboard</span>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <LayoutDashboard className="size-4" />
+            <span>StokMan — Dashboard</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard Stok</h1>
+          <p className="text-sm text-muted-foreground">
+            {activeSite ? `${activeSite.name} · ` : ""}
+            {format(selectedDate, "EEEE, dd MMMM yyyy", { locale: localeId })}
+          </p>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard Stok</h1>
-        <p className="text-sm text-muted-foreground">
-          {activeSite ? `${activeSite.name} · ` : ""}
-          {format(new Date(), "EEEE, dd MMMM yyyy", { locale: localeId })}
-        </p>
+        <div className="flex flex-col items-start gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            Tanggal rekap
+          </span>
+          <DatePicker
+            value={selectedDate}
+            onChange={setSelectedDate}
+            disableFuture
+          />
+          {!isToday && (
+            <span className="text-xs text-amber-600">
+              Menampilkan rekap tanggal lampau.
+            </span>
+          )}
+        </div>
       </header>
 
       <DashboardFilters
@@ -98,7 +119,7 @@ export default function DashboardPage() {
           <ExportButtons
             items={filteredItems}
             rows={filteredRows}
-            meta={{ siteName: activeSite?.name ?? "Site", date: today }}
+            meta={{ siteName: activeSite?.name ?? "Site", date: isoDate }}
           />
         }
       />
@@ -130,7 +151,7 @@ export default function DashboardPage() {
               <CardDescription>
                 {loading
                   ? "Memuat…"
-                  : `${activeSite?.name ?? "Site"} · ${filteredItems.length} dari ${allItems.length} item · saldo hari ini`}
+                  : `${activeSite?.name ?? "Site"} · ${filteredItems.length} dari ${allItems.length} item · ${isToday ? "saldo hari ini" : format(selectedDate, "dd MMM yyyy", { locale: localeId })}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
