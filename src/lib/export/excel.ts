@@ -20,7 +20,7 @@ export function exportStockToExcel(
   const dataRows = buildStockReportRows(items, rows);
 
   const aoa: (string | number)[][] = [
-    ["Laporan Stok — StokMan"],
+    ["Laporan Stok — SIM"],
     [`Site: ${meta.siteName}`, `Tanggal: ${meta.date}`],
     [],
     STOCK_REPORT_COLUMNS,

@@ -128,7 +128,7 @@ export default function UsersPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Users className="size-4" />
-            <span>StokMan — Manajemen Pengguna</span>
+            <span>SIM — Manajemen Pengguna</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Pengguna</h1>
           <p className="text-sm text-muted-foreground">

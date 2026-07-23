@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LogIn, Package } from "lucide-react";
+import { LogIn } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,12 +78,12 @@ function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <Package className="size-6" />
+        <div className="flex size-16 items-center justify-center rounded-xl border bg-card p-2 shadow-sm">
+          <Logo className="size-full" />
         </div>
-        <h1 className="text-xl font-bold tracking-tight">StokMan</h1>
+        <h1 className="text-xl font-bold tracking-tight">SIM</h1>
         <p className="text-sm text-muted-foreground">
-          Masuk untuk mengelola stok harian.
+          Store Inventory Management — masuk untuk mengelola stok harian.
         </p>
       </div>
 

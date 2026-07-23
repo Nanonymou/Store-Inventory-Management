@@ -1,4 +1,4 @@
-# StokMan — Store Inventory Management
+# SIM — Store Inventory Management
 
 Aplikasi manajemen stok harian multi-site: pencatatan transaksi, dashboard nilai
 persediaan, master item, transfer & penyesuaian stok antar 11 lokasi, dengan

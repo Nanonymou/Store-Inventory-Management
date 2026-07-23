@@ -1,6 +1,6 @@
 # Panduan Deploy — Vercel + Neon (PostgreSQL)
 
-Panduan ini menyiapkan StokMan ke produksi di **Vercel** dengan database
+Panduan ini menyiapkan SIM (Store Inventory Management) ke produksi di **Vercel** dengan database
 **Neon**. Aplikasi sudah siap deploy (build lulus, driver DB sudah di-tune untuk
 serverless). Yang perlu kamu lakukan hanya langkah-langkah di bawah — sebagian
 harus lewat akun Vercel/Neon-mu sendiri.

@@ -66,7 +66,7 @@ export default function ProfilePage() {
       <header className="space-y-1">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <User className="size-4" />
-          <span>StokMan — Profil</span>
+          <span>SIM — Profil</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Profil Saya</h1>
       </header>
