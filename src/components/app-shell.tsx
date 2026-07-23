@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   Boxes,
+  Building2,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -51,6 +52,12 @@ const ADMIN_NAV: NavItem[] = [
     adminOnly: true,
   },
   { href: "/users", label: "Pengguna", icon: Users, adminOnly: true },
+  {
+    href: "/sites",
+    label: "Kelola Lokasi",
+    icon: Building2,
+    adminOnly: true,
+  },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, adminOnly: true },
 ];
 

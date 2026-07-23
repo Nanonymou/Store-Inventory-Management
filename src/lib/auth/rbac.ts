@@ -10,6 +10,7 @@ export const ADMIN_ONLY_PREFIXES = [
   "/admin",
   "/master-item",
   "/users",
+  "/sites",
   "/stock-transfer",
   "/stock-adjustment",
   "/audit-log",
