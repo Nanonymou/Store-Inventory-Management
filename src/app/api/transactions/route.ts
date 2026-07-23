@@ -35,9 +35,6 @@ export async function GET(req: Request) {
     if (!isValidISODate(date)) {
       throw new ValidationError("Parameter date harus format YYYY-MM-DD.");
     }
-    if (date > today) {
-      throw new ValidationError("Tanggal masa depan tidak tersedia.");
-    }
 
     const { user, siteId } = await guardWithAudit(
       () => resolveStockSiteScope(session, requestedSiteId),
@@ -46,6 +43,12 @@ export async function GET(req: Request) {
         resourceTarget: `transactions:${requestedSiteId ?? "-"}:${date}`,
       },
     );
+
+    // Admins may record across the whole month (future included); a Storeman is
+    // still limited to dates up to today.
+    if (date > today && user.role !== "admin") {
+      throw new ValidationError("Tanggal masa depan tidak tersedia.");
+    }
 
     const result = await getDashboardStock({ siteId, date, section, query });
 
