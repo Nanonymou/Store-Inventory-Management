@@ -24,7 +24,11 @@ import { useSession } from "@/components/session-provider";
 import { useAsync } from "@/hooks/use-async";
 import { apiGet } from "@/lib/api/client";
 import { splitStockView, type ApiStockViewRow } from "@/lib/api/types";
+import { MOVEMENT_COLUMNS } from "@/lib/types";
 import { toISODate, todayISODate } from "@/lib/date";
+
+/** Movement keys that represent real activity (exclude the carried-over Beg. Balance). */
+const ACTIVITY_KEYS = MOVEMENT_COLUMNS.filter((c) => !c.auto).map((c) => c.key);
 
 /** The site a Storeman is bound to, or the aggregate flag for an Admin. */
 type DashboardScope = "site" | "all";
@@ -94,6 +98,18 @@ export default function DashboardPage() {
     const ids = new Set(filteredItems.map((i) => i.id));
     return allRows.filter((r) => ids.has(r.itemId));
   }, [allRows, filteredItems]);
+
+  // The "Tabel Stok" lists only items that actually moved on the selected date:
+  // any recorded inflow/outflow (Receiving … Spoil). A carried-over Beginning
+  // Balance with no transaction is not activity, so standing stock is hidden.
+  const movedRows = React.useMemo(
+    () => filteredRows.filter((r) => ACTIVITY_KEYS.some((k) => r[k] > 0)),
+    [filteredRows],
+  );
+  const movedItems = React.useMemo(() => {
+    const ids = new Set(movedRows.map((r) => r.itemId));
+    return filteredItems.filter((i) => ids.has(i.id));
+  }, [filteredItems, movedRows]);
 
   return (
     <main className="mx-auto flex max-w-[1500px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -214,15 +230,21 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader className="border-b pb-4">
-              <CardTitle>Tabel Stok Lengkap</CardTitle>
+              <CardTitle>Tabel Stok — Item Bergerak</CardTitle>
               <CardDescription>
                 {loading
                   ? "Memuat…"
-                  : `${scopeLabel} · ${filteredItems.length} dari ${allItems.length} item · ${isToday ? "saldo hari ini" : format(selectedDate, "dd MMM yyyy", { locale: localeId })}`}
+                  : `${scopeLabel} · ${movedItems.length} item bergerak dari ${filteredItems.length} · ${isToday ? "hari ini" : format(selectedDate, "dd MMM yyyy", { locale: localeId })}`}
+                {!loading && (
+                  <span className="mt-0.5 block text-xs text-muted-foreground/80">
+                    Hanya menampilkan item dengan transaksi (masuk/keluar/
+                    perubahan) pada tanggal ini.
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <StockDashboardTable items={filteredItems} rows={filteredRows} />
+              <StockDashboardTable items={movedItems} rows={movedRows} />
             </CardContent>
           </Card>
         </>
