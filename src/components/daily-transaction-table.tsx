@@ -22,6 +22,26 @@ import {
 } from "@/lib/types";
 import { formatNumber, formatRupiah, cn } from "@/lib/utils";
 
+/*
+ * Frozen (sticky) left columns — the item identity (No, Item Code, Description)
+ * stays pinned while the movement columns scroll horizontally, so it is always
+ * clear which item and which column a number is being typed into. The `left-*`
+ * offsets must match the cumulative widths: No = 44px, Item Code = 104px (→
+ * left 44px), Description → left 148px. Header cells sit above the body
+ * (z-30 > z-10) and use a solid background so scrolling content never shows
+ * through; body cells match the row's hover tint via group-hover.
+ */
+const FREEZE_NO_HEAD = "sticky left-0 z-30 w-11 min-w-11 bg-muted";
+const FREEZE_CODE_HEAD = "sticky left-11 z-30 w-[104px] min-w-[104px] bg-muted";
+const FREEZE_DESC_HEAD =
+  "sticky left-[148px] z-30 w-[190px] min-w-[190px] border-r bg-muted";
+const FREEZE_NO_CELL =
+  "sticky left-0 z-10 w-11 min-w-11 bg-background group-hover:bg-muted/50";
+const FREEZE_CODE_CELL =
+  "sticky left-11 z-10 w-[104px] min-w-[104px] bg-background group-hover:bg-muted/50";
+const FREEZE_DESC_CELL =
+  "sticky left-[148px] z-10 w-[190px] min-w-[190px] border-r bg-background group-hover:bg-muted/50";
+
 interface DailyTransactionTableProps {
   items: MasterItem[];
   rows: DailyStockRow[];
@@ -173,12 +193,14 @@ export function DailyTransactionTable({
 
   return (
     <div className="rounded-lg border">
-      <Table>
-        <TableHeader className="sticky top-0 bg-muted/60">
+      <Table containerClassName="max-h-[70vh]">
+        <TableHeader className="sticky top-0 z-20 bg-muted">
           <TableRow>
-            <TableHead className="w-10 text-center">No</TableHead>
-            <TableHead className="min-w-[96px]">Item Code</TableHead>
-            <TableHead className="min-w-[160px]">Description</TableHead>
+            <TableHead className={cn(FREEZE_NO_HEAD, "text-center")}>
+              No
+            </TableHead>
+            <TableHead className={FREEZE_CODE_HEAD}>Item Code</TableHead>
+            <TableHead className={FREEZE_DESC_HEAD}>Description</TableHead>
             <TableHead className="min-w-[110px]">Brand</TableHead>
             <TableHead className="min-w-[70px]">Size</TableHead>
             <TableHead className="min-w-[64px]">Unit</TableHead>
@@ -215,7 +237,9 @@ export function DailyTransactionTable({
                   colSpan={totalCols}
                   className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
-                  {group.section} · {group.items.length} item
+                  <span className="sticky left-2 inline-block">
+                    {group.section} · {group.items.length} item
+                  </span>
                 </TableCell>
               </TableRow>
               {group.items.map((item) => {
@@ -223,14 +247,21 @@ export function DailyTransactionTable({
                 const balance = row ? computeBalance(row) : 0;
                 rowIndex += 1;
                 return (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-center text-muted-foreground">
+                  <TableRow key={item.id} className="group">
+                    <TableCell
+                      className={cn(FREEZE_NO_CELL, "text-center text-muted-foreground")}
+                    >
                       {rowIndex}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap font-mono text-xs">
+                    <TableCell
+                      className={cn(
+                        FREEZE_CODE_CELL,
+                        "whitespace-nowrap font-mono text-xs",
+                      )}
+                    >
                       {item.itemCode}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className={cn(FREEZE_DESC_CELL, "font-medium")}>
                       {item.description}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
