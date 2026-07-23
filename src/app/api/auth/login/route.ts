@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/session";
 import { authenticate } from "@/lib/auth/service";
 import { logActivity } from "@/lib/auth/audit";
+import { isDatabaseUnavailable } from "@/lib/db/errors";
 
 // Uses the database + crypto — Node.js runtime required.
 export const runtime = "nodejs";
@@ -80,6 +81,19 @@ export async function POST(req: Request) {
 
     return res;
   } catch (err) {
+    // Distinguish "database not ready" (misconfig/not migrated) from a genuine
+    // server bug, so the login screen shows an actionable message.
+    if (isDatabaseUnavailable(err)) {
+      console.error("[api/auth/login] database not ready:", err);
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Layanan sedang tidak tersedia — database belum siap. Hubungi admin. (Cek /api/health)",
+        },
+        { status: 503 },
+      );
+    }
     console.error("[api/auth/login] failed:", err);
     return NextResponse.json(
       { ok: false, error: "Terjadi kesalahan pada server." },
