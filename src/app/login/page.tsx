@@ -84,7 +84,7 @@ function LoginForm() {
         </div>
         <h1 className="text-xl font-bold tracking-tight">SIM</h1>
         <p className="text-sm text-muted-foreground">
-          Store Inventory Management — masuk untuk mengelola stok harian.
+          Store Inventory Management
         </p>
       </div>
 
