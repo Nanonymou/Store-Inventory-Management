@@ -19,6 +19,7 @@ const DEMO_ACCOUNTS = [
 const ADMIN_PREFIXES = [
   "/master-item",
   "/users",
+  "/sites",
   "/stock-transfer",
   "/stock-adjustment",
   "/audit-log",

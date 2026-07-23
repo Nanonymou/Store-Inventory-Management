@@ -3,7 +3,7 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { LayoutDashboard, Sigma, Wallet } from "lucide-react";
+import { Building2, LayoutDashboard, MapPin, Sigma, Wallet } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -26,21 +26,34 @@ import { apiGet } from "@/lib/api/client";
 import { splitStockView, type ApiStockViewRow } from "@/lib/api/types";
 import { toISODate, todayISODate } from "@/lib/date";
 
+/** The site a Storeman is bound to, or the aggregate flag for an Admin. */
+type DashboardScope = "site" | "all";
+
 /** Dashboard Stok — central monitoring page, backed by /api/dashboard/stock. */
 export default function DashboardPage() {
-  const { activeSite, activeSiteId, sites } = useSession();
+  const { activeSite, activeSiteId, sites, isAdmin } = useSession();
 
   const [selectedDate, setSelectedDate] = React.useState<Date>(() => new Date());
   const isoDate = toISODate(selectedDate);
   const isToday = isoDate === todayISODate();
 
+  // Admins can flip between the active site and an all-locations aggregate.
+  const [scope, setScope] = React.useState<DashboardScope>("site");
+  const isAll = isAdmin && scope === "all";
+  // Synthetic site key for splitStockView's row ids when aggregating.
+  const scopeSiteId = isAll ? "all" : activeSiteId;
+
   const { data, loading, error, reload } = useAsync(
     () =>
-      apiGet<{ rows: ApiStockViewRow[] }>("/api/dashboard/stock", {
-        siteId: activeSiteId,
-        date: isoDate,
-      }),
-    [activeSiteId, isoDate],
+      isAll
+        ? apiGet<{ rows: ApiStockViewRow[] }>("/api/dashboard/stock/all", {
+            date: isoDate,
+          })
+        : apiGet<{ rows: ApiStockViewRow[] }>("/api/dashboard/stock", {
+            siteId: activeSiteId,
+            date: isoDate,
+          }),
+    [isAll, activeSiteId, isoDate],
   );
 
   const [filters, setFilters] = React.useState<DashboardFilterState>({
@@ -56,9 +69,11 @@ export default function DashboardPage() {
   }, [activeSiteId]);
 
   const { items: allItems, rows: allRows } = React.useMemo(
-    () => splitStockView(data?.rows ?? [], activeSiteId, isoDate),
-    [data, activeSiteId, isoDate],
+    () => splitStockView(data?.rows ?? [], scopeSiteId, isoDate),
+    [data, scopeSiteId, isoDate],
   );
+
+  const scopeLabel = isAll ? "Semua Lokasi" : (activeSite?.name ?? "Site");
 
   const filteredItems = React.useMemo(() => {
     const q = filters.query.trim().toLowerCase();
@@ -90,24 +105,59 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard Stok</h1>
           <p className="text-sm text-muted-foreground">
-            {activeSite ? `${activeSite.name} · ` : ""}
+            {`${scopeLabel} · `}
             {format(selectedDate, "EEEE, dd MMMM yyyy", { locale: localeId })}
           </p>
         </div>
-        <div className="flex flex-col items-start gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            Tanggal rekap
-          </span>
-          <DatePicker
-            value={selectedDate}
-            onChange={setSelectedDate}
-            disableFuture
-          />
-          {!isToday && (
-            <span className="text-xs text-amber-600">
-              Menampilkan rekap tanggal lampau.
-            </span>
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-end">
+          {isAdmin && (
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Cakupan
+              </span>
+              <div className="inline-flex rounded-md border p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setScope("site")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    !isAll
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  <MapPin className="size-3.5" />
+                  {activeSite?.name ?? "Site ini"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope("all")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isAll
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  <Building2 className="size-3.5" />
+                  Semua Lokasi
+                </button>
+              </div>
+            </div>
           )}
+          <div className="flex flex-col items-start gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              Tanggal rekap
+            </span>
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              disableFuture
+            />
+            {!isToday && (
+              <span className="text-xs text-amber-600">
+                Menampilkan rekap tanggal lampau.
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -120,7 +170,7 @@ export default function DashboardPage() {
           <ExportButtons
             items={filteredItems}
             rows={filteredRows}
-            meta={{ siteName: activeSite?.name ?? "Site", date: isoDate }}
+            meta={{ siteName: scopeLabel, date: isoDate }}
           />
         }
       />
@@ -168,7 +218,7 @@ export default function DashboardPage() {
               <CardDescription>
                 {loading
                   ? "Memuat…"
-                  : `${activeSite?.name ?? "Site"} · ${filteredItems.length} dari ${allItems.length} item · ${isToday ? "saldo hari ini" : format(selectedDate, "dd MMM yyyy", { locale: localeId })}`}
+                  : `${scopeLabel} · ${filteredItems.length} dari ${allItems.length} item · ${isToday ? "saldo hari ini" : format(selectedDate, "dd MMM yyyy", { locale: localeId })}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">

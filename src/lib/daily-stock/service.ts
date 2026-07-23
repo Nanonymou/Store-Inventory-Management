@@ -339,3 +339,98 @@ export async function getDailyStockView(
     };
   });
 }
+
+/**
+ * Aggregate the daily transaction view across ALL sites for a date: every
+ * active master item paired with the sum of its stored movement quantities over
+ * every site on that date (0 where nothing was recorded). Powers the Admin's
+ * "Semua Lokasi" dashboard recap. The row shape matches getDailyStockView so
+ * the same dashboard components render it unchanged.
+ */
+export async function getAllSitesStockView(
+  date: string,
+): Promise<DailyStockViewRow[]> {
+  const items = await db
+    .select({
+      id: masterItems.id,
+      itemCode: masterItems.itemCode,
+      description: masterItems.description,
+      brand: masterItems.brand,
+      size: masterItems.size,
+      unit: masterItems.unit,
+      price: masterItems.price,
+      section: itemSections.name,
+    })
+    .from(masterItems)
+    .innerJoin(itemSections, eq(masterItems.sectionId, itemSections.id))
+    .where(eq(masterItems.isActive, 1))
+    .orderBy(asc(masterItems.itemCode));
+
+  // Sum every movement column per item across all sites for the date.
+  const aggregated = await db
+    .select({
+      itemId: dailyStock.itemId,
+      begBalance: sql<number>`coalesce(sum(${dailyStock.begBalance}), 0)`,
+      receiving: sql<number>`coalesce(sum(${dailyStock.receiving}), 0)`,
+      regular: sql<number>`coalesce(sum(${dailyStock.regular}), 0)`,
+      snack: sql<number>`coalesce(sum(${dailyStock.snack}), 0)`,
+      backcharge: sql<number>`coalesce(sum(${dailyStock.backcharge}), 0)`,
+      hkl: sql<number>`coalesce(sum(${dailyStock.hkl}), 0)`,
+      event: sql<number>`coalesce(sum(${dailyStock.event}), 0)`,
+      ent: sql<number>`coalesce(sum(${dailyStock.ent}), 0)`,
+      toQty: sql<number>`coalesce(sum(${dailyStock.toQty}), 0)`,
+      spoil: sql<number>`coalesce(sum(${dailyStock.spoil}), 0)`,
+      balance: sql<number>`coalesce(sum(${dailyStock.balance}), 0)`,
+    })
+    .from(dailyStock)
+    .where(eq(dailyStock.recordDate, date))
+    .groupBy(dailyStock.itemId);
+
+  const byItem = new Map(aggregated.map((r) => [r.itemId, r]));
+
+  return items.map((item) => {
+    const a = byItem.get(item.id);
+    if (a) {
+      return {
+        itemId: item.id,
+        itemCode: item.itemCode,
+        description: item.description,
+        brand: item.brand,
+        size: item.size,
+        unit: item.unit,
+        price: item.price,
+        section: item.section,
+        begBalance: Number(a.begBalance),
+        receiving: Number(a.receiving),
+        regular: Number(a.regular),
+        snack: Number(a.snack),
+        backcharge: Number(a.backcharge),
+        hkl: Number(a.hkl),
+        event: Number(a.event),
+        ent: Number(a.ent),
+        toQty: Number(a.toQty),
+        spoil: Number(a.spoil),
+        balance: Number(a.balance),
+        persisted: true,
+      };
+    }
+
+    const movements: DailyStockMovements = {
+      begBalance: 0,
+      ...ZERO_MOVEMENTS,
+    };
+    return {
+      itemId: item.id,
+      itemCode: item.itemCode,
+      description: item.description,
+      brand: item.brand,
+      size: item.size,
+      unit: item.unit,
+      price: item.price,
+      section: item.section,
+      ...movements,
+      balance: computeBalance(movements),
+      persisted: false,
+    };
+  });
+}
