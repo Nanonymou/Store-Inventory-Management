@@ -12,10 +12,12 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import {
+  ITEM_SECTIONS,
   MOVEMENT_COLUMNS,
   computeBalance,
   type DailyStockMovements,
   type DailyStockRow,
+  type ItemSection,
   type MasterItem,
 } from "@/lib/types";
 import { formatNumber, formatRupiah, cn } from "@/lib/utils";
@@ -146,6 +148,29 @@ export function DailyTransactionTable({
     return totals;
   }, [items, rowByItem]);
 
+  // Group items by section (in canonical order) so the input form mirrors the
+  // dashboard's grouped layout.
+  const groups = React.useMemo(() => {
+    const bySection = new Map<ItemSection, MasterItem[]>();
+    for (const section of ITEM_SECTIONS) bySection.set(section, []);
+    const other: MasterItem[] = [];
+    for (const item of items) {
+      const list = bySection.get(item.section);
+      if (list) list.push(item);
+      else other.push(item);
+    }
+    const result = ITEM_SECTIONS.map((section) => ({
+      section: section as string,
+      items: bySection.get(section) ?? [],
+    })).filter((g) => g.items.length > 0);
+    if (other.length > 0) result.push({ section: "Lainnya", items: other });
+    return result;
+  }, [items]);
+
+  // Total column count (No + Code + Desc + Brand + Size + Unit + Price + moves + Balance).
+  const totalCols = 7 + MOVEMENT_COLUMNS.length + 1;
+  let rowIndex = 0;
+
   return (
     <div className="rounded-lg border">
       <Table>
@@ -162,7 +187,7 @@ export function DailyTransactionTable({
               <TableHead
                 key={col.key}
                 className={cn(
-                  "min-w-[86px] text-right",
+                  "min-w-[92px] whitespace-nowrap text-right",
                   col.isOutflow ? "text-destructive/80" : "text-foreground",
                 )}
               >
@@ -177,61 +202,76 @@ export function DailyTransactionTable({
                 )}
               </TableHead>
             ))}
-            <TableHead className="min-w-[96px] text-right font-semibold">
+            <TableHead className="min-w-[96px] whitespace-nowrap text-right font-semibold">
               Balance
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item, index) => {
-            const row = rowByItem.get(item.id);
-            const balance = row ? computeBalance(row) : 0;
-            return (
-              <TableRow key={item.id}>
-                <TableCell className="text-center text-muted-foreground">
-                  {index + 1}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {item.itemCode}
-                </TableCell>
-                <TableCell className="font-medium">
-                  {item.description}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {item.brand}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {item.size}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {item.unit}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatRupiah(item.price)}
-                </TableCell>
-                {MOVEMENT_COLUMNS.map((col) => (
-                  <MovementCell
-                    key={col.key}
-                    value={row ? row[col.key] : 0}
-                    price={item.price}
-                    isOutflow={col.isOutflow}
-                    editable={editable}
-                    showValue={showValue}
-                    auto={col.auto}
-                    onChange={(next) => onCellChange?.(item.id, col.key, next)}
-                  />
-                ))}
+          {groups.map((group) => (
+            <React.Fragment key={group.section}>
+              <TableRow className="bg-accent/50 hover:bg-accent/50">
                 <TableCell
-                  className={cn(
-                    "text-right font-semibold tabular-nums",
-                    balance < 0 ? "text-destructive" : "",
-                  )}
+                  colSpan={totalCols}
+                  className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
-                  {formatNumber(balance)}
+                  {group.section} · {group.items.length} item
                 </TableCell>
               </TableRow>
-            );
-          })}
+              {group.items.map((item) => {
+                const row = rowByItem.get(item.id);
+                const balance = row ? computeBalance(row) : 0;
+                rowIndex += 1;
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-center text-muted-foreground">
+                      {rowIndex}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs">
+                      {item.itemCode}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {item.description}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.brand}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.size}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.unit}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
+                      {formatRupiah(item.price)}
+                    </TableCell>
+                    {MOVEMENT_COLUMNS.map((col) => (
+                      <MovementCell
+                        key={col.key}
+                        value={row ? row[col.key] : 0}
+                        price={item.price}
+                        isOutflow={col.isOutflow}
+                        editable={editable}
+                        showValue={showValue}
+                        auto={col.auto}
+                        onChange={(next) =>
+                          onCellChange?.(item.id, col.key, next)
+                        }
+                      />
+                    ))}
+                    <TableCell
+                      className={cn(
+                        "text-right font-semibold tabular-nums",
+                        balance < 0 ? "text-destructive" : "",
+                      )}
+                    >
+                      {formatNumber(balance)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </React.Fragment>
+          ))}
         </TableBody>
         <TableFooter>
           <TableRow>
