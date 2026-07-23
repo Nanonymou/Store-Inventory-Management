@@ -33,14 +33,16 @@ export async function GET(req: Request) {
     if (!isValidISODate(date)) {
       throw new ValidationError("Parameter date harus format YYYY-MM-DD.");
     }
-    if (date > todayISODate()) {
-      throw new ValidationError("Tanggal masa depan tidak tersedia.");
-    }
 
-    await guardWithAudit(() => assertSiteAccess(session, siteId), {
+    const user = await guardWithAudit(() => assertSiteAccess(session, siteId), {
       user: session,
       resourceTarget: `daily_stock:${siteId}:${date}`,
     });
+
+    // Admins may read/record any date in the month; a Storeman is capped at today.
+    if (date > todayISODate() && user.role !== "admin") {
+      throw new ValidationError("Tanggal masa depan tidak tersedia.");
+    }
 
     const rows = await getDailyStockView(siteId, date);
     return NextResponse.json({ ok: true, siteId, date, rows });

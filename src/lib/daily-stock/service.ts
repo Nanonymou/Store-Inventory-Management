@@ -297,17 +297,18 @@ export async function getDailyStockView(
 
   return items.map((item) => {
     const stored = currentByItem.get(item.id);
+
+    // Beginning Balance is an auto, read-only column: it must ALWAYS equal the
+    // previous day's closing Balance. We derive it live here — even for a row
+    // already saved today — so that editing an earlier day correctly flows into
+    // this day's Beginning Balance instead of staying frozen at the value it
+    // had when this day was first saved. The displayed Balance is recomputed to
+    // match.
+    const begBalance = prevBalanceByItem.get(item.id) ?? 0;
+
     if (stored) {
-      return {
-        itemId: item.id,
-        itemCode: item.itemCode,
-        description: item.description,
-        brand: item.brand,
-        size: item.size,
-        unit: item.unit,
-        price: item.price,
-        section: item.section,
-        begBalance: stored.begBalance,
+      const movements: DailyStockMovements = {
+        begBalance,
         receiving: stored.receiving,
         regular: stored.regular,
         snack: stored.snack,
@@ -317,12 +318,22 @@ export async function getDailyStockView(
         ent: stored.ent,
         toQty: stored.toQty,
         spoil: stored.spoil,
-        balance: stored.balance,
+      };
+      return {
+        itemId: item.id,
+        itemCode: item.itemCode,
+        description: item.description,
+        brand: item.brand,
+        size: item.size,
+        unit: item.unit,
+        price: item.price,
+        section: item.section,
+        ...movements,
+        balance: computeBalance(movements),
         persisted: true,
       };
     }
 
-    const begBalance = prevBalanceByItem.get(item.id) ?? 0;
     const movements: DailyStockMovements = { begBalance, ...ZERO_MOVEMENTS };
     return {
       itemId: item.id,

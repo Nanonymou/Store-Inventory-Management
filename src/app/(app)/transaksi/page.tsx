@@ -143,10 +143,13 @@ export default function DailyTransactionPage() {
             <DatePicker
               value={selectedDate}
               onChange={setSelectedDate}
-              disableFuture
+              disableFuture={!isAdmin}
             />
             {editable ? (
-              <span className="text-xs text-emerald-600">Mode input aktif.</span>
+              <span className="text-xs text-emerald-600">
+                Mode input aktif.
+                {isAdmin && !isToday && " (Admin — semua tanggal)"}
+              </span>
             ) : (
               <span className="flex items-center gap-1 text-xs text-amber-600">
                 <Lock className="size-3" />

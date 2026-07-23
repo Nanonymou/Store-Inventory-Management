@@ -39,7 +39,8 @@ export function canAccessSite(user: SessionUser, siteId: string): boolean {
 
 /**
  * Whether a user may edit the record for `isoDate` (YYYY-MM-DD).
- * Admin: any date up to and including today (never the future).
+ * Admin: any calendar date (past, today, or future) — free to record across
+ *        the whole month, not just the running day.
  * Storeman: today only.
  */
 export function canEditDate(
@@ -47,7 +48,6 @@ export function canEditDate(
   isoDate: string,
   today: string,
 ): boolean {
-  if (isoDate > today) return false; // future is locked for everyone
   if (user.role === "admin") return true;
   return isoDate === today;
 }
