@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "StokMan — Store Inventory Management",
+  title: "SIM — Store Inventory Management",
   description:
     "Aplikasi manajemen stok harian multi-site untuk pencatatan transaksi, valuasi persediaan, dan pelaporan.",
 };

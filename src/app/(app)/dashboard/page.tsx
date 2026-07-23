@@ -3,7 +3,7 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { LayoutDashboard, Wallet } from "lucide-react";
+import { LayoutDashboard, Sigma, Wallet } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { StockDashboardTable } from "@/components/stock-dashboard-table";
 import { ValueSummary } from "@/components/value-summary";
+import { SectionValueMatrix } from "@/components/section-value-matrix";
 import {
   DashboardFilters,
   type DashboardFilterState,
@@ -85,7 +86,7 @@ export default function DashboardPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <LayoutDashboard className="size-4" />
-            <span>StokMan — Dashboard</span>
+            <span>SIM — Dashboard</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard Stok</h1>
           <p className="text-sm text-muted-foreground">
@@ -144,6 +145,22 @@ export default function DashboardPage() {
             </div>
             <ValueSummary items={filteredItems} rows={filteredRows} />
           </section>
+
+          <Card>
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <Sigma className="size-4" />
+                Resume Nilai per Klasifikasi
+              </CardTitle>
+              <CardDescription>
+                Total nilai (Rp) tiap seksi menurut arus stok — Beginning
+                Balance, Received, Reguler, Snack, dan seterusnya.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <SectionValueMatrix items={filteredItems} rows={filteredRows} />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader className="border-b pb-4">

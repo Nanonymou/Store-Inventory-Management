@@ -184,7 +184,7 @@ export default function MasterItemPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Boxes className="size-4" />
-            <span>StokMan — Master Data</span>
+            <span>SIM — Master Data</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Manajemen Item</h1>
           <p className="text-sm text-muted-foreground">

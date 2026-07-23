@@ -160,7 +160,7 @@ export default function StockAdjustmentPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <SlidersHorizontal className="size-4" />
-            <span>StokMan — Penyesuaian Stok</span>
+            <span>SIM — Penyesuaian Stok</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Stock Adjustment</h1>
           <p className="text-sm text-muted-foreground">

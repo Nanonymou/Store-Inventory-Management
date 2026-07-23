@@ -63,7 +63,7 @@ export default function AuditLogPage() {
       <header className="space-y-1">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ScrollText className="size-4" />
-          <span>StokMan — Keamanan</span>
+          <span>SIM — Keamanan</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
         <p className="text-sm text-muted-foreground">

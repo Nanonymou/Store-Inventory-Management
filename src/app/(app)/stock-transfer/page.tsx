@@ -150,7 +150,7 @@ export default function StockTransferPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ArrowLeftRight className="size-4" />
-            <span>StokMan — Mutasi Antar Site</span>
+            <span>SIM — Mutasi Antar Site</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Stock Transfer</h1>
           <p className="text-sm text-muted-foreground">

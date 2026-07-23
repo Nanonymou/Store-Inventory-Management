@@ -10,8 +10,6 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
-  Package,
-  PackageSearch,
   ScrollText,
   ShieldCheck,
   SlidersHorizontal,
@@ -19,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useSession } from "@/components/session-provider";
@@ -85,11 +84,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar — desktop only. */}
       <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/30 lg:flex">
         <div className="flex h-16 items-center gap-2 border-b px-6">
-          <Package className="size-6 text-primary" />
+          <Logo className="size-7" />
           <div className="leading-tight">
-            <div className="text-sm font-bold">StokMan</div>
+            <div className="text-sm font-bold">SIM</div>
             <div className="text-[11px] text-muted-foreground">
-              Store Inventory
+              Store Inventory Management
             </div>
           </div>
         </div>
@@ -128,8 +127,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top bar — brand, mobile nav, site picker, user, logout. */}
         <header className="flex h-16 items-center gap-4 border-b px-4 sm:px-6">
           <div className="flex items-center gap-2 lg:hidden">
-            <PackageSearch className="size-5 text-primary" />
-            <span className="text-sm font-bold">StokMan</span>
+            <Logo className="size-6" />
+            <span className="text-sm font-bold">SIM</span>
           </div>
           <nav className="flex items-center gap-1 overflow-x-auto lg:hidden">
             {mobileNav.map((item) => (

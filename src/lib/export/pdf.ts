@@ -26,7 +26,7 @@ export function exportStockToPdf(
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
   doc.setFontSize(14);
-  doc.text("Laporan Stok — StokMan", 40, 40);
+  doc.text("Laporan Stok — SIM", 40, 40);
   doc.setFontSize(10);
   doc.setTextColor(90);
   doc.text(`Site: ${meta.siteName}    Tanggal: ${meta.date}`, 40, 58);
