@@ -49,6 +49,16 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        // Soft, layered shadows with a cool slate tint for a premium feel.
+        // These override the Tailwind defaults, so existing shadow-sm / shadow /
+        // shadow-md / shadow-lg usages are elevated without touching components.
+        sm: "0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06)",
+        DEFAULT:
+          "0 1px 3px 0 rgb(16 24 40 / 0.07), 0 1px 2px -1px rgb(16 24 40 / 0.08)",
+        md: "0 4px 10px -2px rgb(16 24 40 / 0.08), 0 2px 6px -2px rgb(16 24 40 / 0.05)",
+        lg: "0 12px 20px -6px rgb(16 24 40 / 0.10), 0 6px 10px -6px rgb(16 24 40 / 0.05)",
+      },
     },
   },
   plugins: [],
