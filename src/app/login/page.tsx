@@ -96,7 +96,7 @@ function LoginForm() {
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-xl border bg-card p-6 shadow-sm"
+        className="space-y-4 rounded-xl border bg-card p-6 shadow-md"
         noValidate
       >
         <div className="space-y-1.5">
@@ -160,7 +160,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background via-background to-muted/50 p-4">
       <React.Suspense fallback={null}>
         <LoginForm />
       </React.Suspense>
