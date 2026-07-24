@@ -68,7 +68,7 @@ export function DatePicker({
           : "Pilih tanggal"}
       </Button>
       {open && !disabled && (
-        <div className="absolute z-50 mt-2 rounded-md border bg-popover text-popover-foreground shadow-md">
+        <div className="absolute z-50 mt-2 rounded-md border bg-popover text-popover-foreground shadow-float">
           <Calendar
             mode="single"
             selected={value}

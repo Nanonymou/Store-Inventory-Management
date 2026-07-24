@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar — desktop only. */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/30 lg:flex">
+      <aside className="relative z-10 hidden w-60 shrink-0 flex-col border-r bg-muted/30 shadow-[6px_0_24px_-14px_rgb(16_24_40/0.18)] lg:flex">
         <div className="flex h-16 items-center gap-2 border-b px-6">
           <Logo className="size-7" />
           <div className="leading-tight">

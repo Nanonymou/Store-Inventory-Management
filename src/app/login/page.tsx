@@ -79,7 +79,7 @@ function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <div className="flex size-16 items-center justify-center rounded-xl border bg-card p-2 shadow-sm">
+        <div className="flex size-16 items-center justify-center rounded-xl border bg-card p-2 shadow-card">
           <Logo className="size-full" />
         </div>
         <h1 className="text-xl font-bold tracking-tight">SIM</h1>
